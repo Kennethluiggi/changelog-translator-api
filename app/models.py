@@ -1,0 +1,30 @@
+from typing import List, Optional, Literal
+from pydantic import BaseModel, Field
+
+Audience = Literal["cs", "support", "customer"]
+Tone = Literal["neutral", "friendly", "direct"]
+ChangeType = Literal["added", "changed", "fixed", "deprecated", "security"]
+
+
+class TranslateRequest(BaseModel):
+    raw_text: str = Field(..., min_length=1, description="Raw changelog text from engineering.")
+    audience: List[Audience] = Field(..., min_length=1, description="Which audiences to generate outputs for.")
+    tone: Tone = Field("neutral", description="Output tone.")
+    product_area: Optional[str] = Field(None, description="Optional product area label (e.g., Billing, Auth, Mobile).")
+    constraints: Optional[str] = Field(None, description="Optional constraints (e.g., 'no jargon', 'bullet points').")
+
+
+class ExtractedChange(BaseModel):
+    type: ChangeType
+    area: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+
+
+class TranslateResponse(BaseModel):
+    cs_summary: List[str] = Field(default_factory=list)
+    support_notes: List[str] = Field(default_factory=list)
+    customer_summary: List[str] = Field(default_factory=list)
+    risk_flags: List[str] = Field(default_factory=list)
+    follow_up_questions: List[str] = Field(default_factory=list)
+    extracted_changes: List[ExtractedChange] = Field(default_factory=list)
+
