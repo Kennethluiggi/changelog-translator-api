@@ -24,6 +24,37 @@ RISK_KEYWORDS = {
     "rate limit impact": ["rate limit", "throttle"],
 }
 
+AREA_KEYWORDS = {
+    "Auth": ["auth", "oauth", "token", "login", "sso"],
+    "Billing": ["billing", "invoice", "subscription", "payment", "checkout"],
+    "API": ["api", "endpoint", "version", "v1", "v2", "schema"],
+    "Permissions": ["permission", "role", "rbac", "access"],
+    "UI": ["ui", "dashboard", "page", "button", "modal"],
+    "Performance": ["latency", "performance", "timeout", "slow"],
+    "Security": ["security", "vulnerability", "cve", "patched"],
+}
+
+def infer_area(line: str) -> str:
+    lower = line.lower()
+    for area, keys in AREA_KEYWORDS.items():
+        if any(k in lower for k in keys):
+            return area
+    return "General"
+
+
+def impact_from_risks(risks: List[str]) -> str:
+    # High impact signals
+    high = {"breaking change", "downtime risk", "migration required"}
+    if any(r in high for r in risks):
+        return "high"
+
+    # Medium impact signals
+    medium = {"authentication impact", "billing impact", "rate limit impact"}
+    if any(r in medium for r in risks):
+        return "medium"
+
+    return "low"
+
 
 def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip())
@@ -73,12 +104,17 @@ def extract_changes(lines: List[str], product_area: str | None) -> List[Extracte
 
     for line in lines:
         change_type = detect_change_type(line)
-        cleaned = re.sub(r"^(added|fixed|changed|deprecated|security|breaking change:?)\s*", "", line, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^(added|fixed|changed|deprecated|security|breaking change)\s*:?\s*",
+                        "",
+                        line,
+                         flags=re.IGNORECASE,
+                        )
+
 
         extracted.append(
             ExtractedChange(
             type=change_type,
-            area=product_area or "General",
+            area=product_area or infer_area(line),
             description=cleaned,
             )
         )
@@ -107,10 +143,14 @@ def build_support_notes(extracted: List[ExtractedChange]) -> List[str]:
 def build_customer_summary(extracted: List[ExtractedChange]) -> List[str]:
     summary = []
     for change in extracted:
-        summary.append(
-            f"We’ve made improvements: {change.description}"
-        )
+        if change.type == "fixed":
+            summary.append(f"Fix: {change.description}")
+        elif change.type == "security":
+            summary.append("Security improvements applied.")
+        else:
+            summary.append(f"Update: {change.description}")
     return summary
+
 
 
 def build_follow_up_questions(risks: List[str]) -> List[str]:
@@ -138,6 +178,8 @@ def translate(req: TranslateRequest) -> TranslateResponse:
 
     extracted = extract_changes(lines, req.product_area)
     risks = detect_risks(normalized_text)
+    impact_level = impact_from_risks(risks)
+
 
     return TranslateResponse(
         cs_summary=build_cs_summary(extracted) if "cs" in req.audience else [],
@@ -146,5 +188,6 @@ def translate(req: TranslateRequest) -> TranslateResponse:
         risk_flags=risks,
         follow_up_questions=build_follow_up_questions(risks),
         extracted_changes=extracted,
+        impact_level=impact_level,
     )
 

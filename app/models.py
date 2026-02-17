@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 Audience = Literal["cs", "support", "customer"]
 Tone = Literal["neutral", "friendly", "direct"]
 ChangeType = Literal["added", "changed", "fixed", "deprecated", "security"]
+ImpactLevel = Literal["low", "medium", "high"]
+
 
 
 class TranslateRequest(BaseModel):
@@ -27,4 +29,6 @@ class TranslateResponse(BaseModel):
     risk_flags: List[str] = Field(default_factory=list)
     follow_up_questions: List[str] = Field(default_factory=list)
     extracted_changes: List[ExtractedChange] = Field(default_factory=list)
+    impact_level: ImpactLevel = "low"
+
 
