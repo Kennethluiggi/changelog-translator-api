@@ -1,0 +1,13 @@
+@"
+# env files (do not commit secrets)
+.env
+.env.*
+
+# python caches
+__pycache__/
+*.pyc
+
+# virtual environments
+.venv/
+venv/
+"@ | Set-Content .gitignore
