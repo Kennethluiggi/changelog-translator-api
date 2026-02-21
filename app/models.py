@@ -5,6 +5,9 @@ Audience = Literal["cs", "support", "customer"]
 Tone = Literal["neutral", "friendly", "direct"]
 ChangeType = Literal["added", "changed", "fixed", "deprecated", "security"]
 ImpactLevel = Literal["low", "medium", "high"]
+Mode = Literal["basic", "ai"]
+Persona = Literal["cs", "support", "customer", "tam", "pm", "marketing", "legal"]
+
 
 
 
@@ -14,6 +17,9 @@ class TranslateRequest(BaseModel):
     tone: Tone = Field("neutral", description="Output tone.")
     product_area: Optional[str] = Field(None, description="Optional product area label (e.g., Billing, Auth, Mobile).")
     constraints: Optional[str] = Field(None, description="Optional constraints (e.g., 'no jargon', 'bullet points').")
+    mode: Mode = Field("basic", description="basic = rule-based, ai = AI-enhanced (pro only)")
+    persona: Optional[Persona] = Field(None, description="Persona targeting (used by AI mode)")
+
 
 
 class ExtractedChange(BaseModel):
