@@ -1,5 +1,6 @@
 import re
 from typing import List
+from .ai import get_provider
 from .models import (
     TranslateRequest,
     TranslateResponse,
@@ -34,6 +35,7 @@ AREA_KEYWORDS = {
     "Security": ["security", "vulnerability", "cve", "patched"],
 }
 
+
 def infer_area(line: str) -> str:
     lower = line.lower()
     for area, keys in AREA_KEYWORDS.items():
@@ -43,12 +45,10 @@ def infer_area(line: str) -> str:
 
 
 def impact_from_risks(risks: List[str]) -> str:
-    # High impact signals
     high = {"breaking change", "downtime risk", "migration required"}
     if any(r in high for r in risks):
         return "high"
 
-    # Medium impact signals
     medium = {"authentication impact", "billing impact", "rate limit impact"}
     if any(r in medium for r in risks):
         return "medium"
@@ -61,10 +61,7 @@ def normalize_text(text: str) -> str:
 
 
 def split_into_lines(text: str) -> List[str]:
-    # Split on newline first
     lines = text.split("\n")
-
-    # Then split large sentences by period if they contain multiple changes
     final_lines = []
     for line in lines:
         parts = re.split(r"\.\s+", line)
@@ -72,9 +69,7 @@ def split_into_lines(text: str) -> List[str]:
             clean = part.strip().strip(".")
             if clean:
                 final_lines.append(clean)
-
     return final_lines
-
 
 
 def detect_change_type(line: str) -> str:
@@ -104,18 +99,18 @@ def extract_changes(lines: List[str], product_area: str | None) -> List[Extracte
 
     for line in lines:
         change_type = detect_change_type(line)
-        cleaned = re.sub(r"^(added|fixed|changed|deprecated|security|breaking change)\s*:?\s*",
-                        "",
-                        line,
-                         flags=re.IGNORECASE,
-                        )
-
+        cleaned = re.sub(
+            r"^(added|fixed|changed|deprecated|security|breaking change)\s*:?\s*",
+            "",
+            line,
+            flags=re.IGNORECASE,
+        )
 
         extracted.append(
             ExtractedChange(
-            type=change_type,
-            area=product_area or infer_area(line),
-            description=cleaned,
+                type=change_type,
+                area=product_area or infer_area(line),
+                description=cleaned,
             )
         )
 
@@ -123,21 +118,11 @@ def extract_changes(lines: List[str], product_area: str | None) -> List[Extracte
 
 
 def build_cs_summary(extracted: List[ExtractedChange]) -> List[str]:
-    bullets = []
-    for change in extracted:
-        bullets.append(
-            f"{change.type.capitalize()} — {change.area}: {change.description}"
-        )
-    return bullets
+    return [f"{change.type.capitalize()} — {change.area}: {change.description}" for change in extracted]
 
 
 def build_support_notes(extracted: List[ExtractedChange]) -> List[str]:
-    notes = []
-    for change in extracted:
-        notes.append(
-            f"Support awareness — {change.description}"
-        )
-    return notes
+    return [f"Support awareness — {change.description}" for change in extracted]
 
 
 def build_customer_summary(extracted: List[ExtractedChange]) -> List[str]:
@@ -150,7 +135,6 @@ def build_customer_summary(extracted: List[ExtractedChange]) -> List[str]:
         else:
             summary.append(f"Update: {change.description}")
     return summary
-
 
 
 def build_follow_up_questions(risks: List[str]) -> List[str]:
@@ -166,28 +150,61 @@ def build_follow_up_questions(risks: List[str]) -> List[str]:
     return questions
 
 
+def detect_scopes(text: str) -> List[str]:
+    found = re.findall(r"\b[a-z][a-z0-9_-]*:[a-z0-9_.*-]+\b", text.lower())
+    seen = set()
+    ordered: List[str] = []
+    for scope in found:
+        if scope not in seen:
+            seen.add(scope)
+            ordered.append(scope)
+    return ordered
+
+
 def translate(req: TranslateRequest) -> TranslateResponse:
-    # 1) Preserve structure by splitting first
-    lines = split_into_lines(req.raw_text)
-
-    # 2) Normalize each line independently
-    lines = [normalize_text(line) for line in lines]
-
-    # 3) Use a normalized full-text string only for risk scanning
+    lines = [normalize_text(line) for line in split_into_lines(req.raw_text)]
     normalized_text = normalize_text(req.raw_text)
 
     extracted = extract_changes(lines, req.product_area)
     risks = detect_risks(normalized_text)
+    scopes = detect_scopes(normalized_text)
     impact_level = impact_from_risks(risks)
 
+    follow_ups = build_follow_up_questions(risks)
+    if scopes:
+        follow_ups.append(f"Which partners are mapped to these scopes: {', '.join(scopes)}?")
 
-    return TranslateResponse(
+    support_notes = build_support_notes(extracted) if "support" in req.audience else []
+    if scopes and support_notes:
+        support_notes.append(f"Scope watchlist: {', '.join(scopes)}")
+
+    response = TranslateResponse(
         cs_summary=build_cs_summary(extracted) if "cs" in req.audience else [],
-        support_notes=build_support_notes(extracted) if "support" in req.audience else [],
+        support_notes=support_notes,
         customer_summary=build_customer_summary(extracted) if "customer" in req.audience else [],
         risk_flags=risks,
-        follow_up_questions=build_follow_up_questions(risks),
+        follow_up_questions=follow_ups,
         extracted_changes=extracted,
         impact_level=impact_level,
     )
 
+    if req.mode == "ai":
+        provider = get_provider()
+        response.ai_provider = provider.name
+        try:
+            response.ai_enhancement = provider.enhance(req, response)
+            if response.ai_enhancement.impacted_scopes:
+                scope_phrase = ", ".join(response.ai_enhancement.impacted_scopes)
+                if response.cs_summary:
+                    response.cs_summary.append(f"AI/PRO insight — impacted scopes: {scope_phrase}.")
+                if response.support_notes:
+                    response.support_notes.append(
+                        f"AI/PRO escalation guidance — prioritize tickets tied to scopes: {scope_phrase}."
+                    )
+            if response.ai_enhancement.impacted_partners and response.customer_summary:
+                partners = ", ".join(response.ai_enhancement.impacted_partners[:6])
+                response.customer_summary.append(f"AI/PRO impacted partners: {partners}.")
+        except Exception:
+            response.ai_fallback_used = True
+
+    return response
