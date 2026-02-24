@@ -193,6 +193,17 @@ def translate(req: TranslateRequest) -> TranslateResponse:
         response.ai_provider = provider.name
         try:
             response.ai_enhancement = provider.enhance(req, response)
+            if response.ai_enhancement.impacted_scopes:
+                scope_phrase = ", ".join(response.ai_enhancement.impacted_scopes)
+                if response.cs_summary:
+                    response.cs_summary.append(f"AI/PRO insight — impacted scopes: {scope_phrase}.")
+                if response.support_notes:
+                    response.support_notes.append(
+                        f"AI/PRO escalation guidance — prioritize tickets tied to scopes: {scope_phrase}."
+                    )
+            if response.ai_enhancement.impacted_partners and response.customer_summary:
+                partners = ", ".join(response.ai_enhancement.impacted_partners[:6])
+                response.customer_summary.append(f"AI/PRO impacted partners: {partners}.")
         except Exception:
             response.ai_fallback_used = True
 

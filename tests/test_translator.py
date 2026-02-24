@@ -38,11 +38,6 @@ def test_ai_mock_oauth_partner_messaging_is_more_executive():
             "Breaking: integrations using auth:legacy must migrate by June 30."
         ),
         audience=["cs", "support", "customer"],
-        partner_accounts=[
-            {"name": "Northstar Bank", "scopes": ["auth:legacy", "payments:read"]},
-            {"name": "Acme Payroll", "scopes": ["auth:token.rotate", "profile:read"]},
-            {"name": "Orbit HR", "scopes": ["auth:legacy", "employees:read"]},
-        ],
         mode="ai",
     )
 
@@ -50,10 +45,9 @@ def test_ai_mock_oauth_partner_messaging_is_more_executive():
 
     assert res.ai_enhancement is not None
     assert "OAuth" in res.ai_enhancement.executive_summary
-    assert "Northstar Bank" in res.ai_enhancement.executive_summary
-    assert any("partner" in q.lower() for q in res.ai_enhancement.customer_followups)
+    assert "auth:legacy" in res.ai_enhancement.executive_summary
     assert "Northstar Bank" in res.ai_enhancement.impacted_partners
-    assert "Subject: Required OAuth Scope Migration Action" in res.ai_enhancement.partner_email_draft
+    assert "Subject: Quick alignment on upcoming OAuth scope changes" in res.ai_enhancement.partner_email_draft
 
 
 def test_basic_mode_stays_deterministic_without_ai_draft():
@@ -64,9 +58,6 @@ def test_basic_mode_stays_deterministic_without_ai_draft():
             "Breaking: integrations using auth:legacy must migrate by June 30."
         ),
         audience=["cs", "support", "customer"],
-        partner_accounts=[
-            {"name": "Northstar Bank", "scopes": ["auth:legacy", "payments:read"]},
-        ],
         mode="basic",
     )
 

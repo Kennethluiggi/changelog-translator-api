@@ -22,7 +22,7 @@ Engineering changelogs are often technical and inconsistent. This API standardiz
 
 > Same input text can produce different outputs by design:
 > - `mode="basic"` returns deterministic, concise, scope/risk-focused output.
-> - `mode="ai"` returns an enriched executive narrative with impacted partner mapping and a ready-to-send partner email draft.
+> - `mode="ai"` returns an enriched executive narrative with impacted partner mapping (from internal scope catalog) and a ready-to-send empathetic partner email draft.
 
 See detailed diagrams in [`docs/FLOWCHART.md`](docs/FLOWCHART.md).
 
@@ -106,11 +106,6 @@ Tip: Upload your video by dragging it into a GitHub issue comment, then paste th
 {
   "raw_text": "Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
   "audience": ["cs", "support", "customer"],
-  "partner_accounts": [
-    {"name": "Northstar Bank", "scopes": ["auth:legacy", "payments:read"]},
-    {"name": "Acme Payroll", "scopes": ["auth:token.rotate", "profile:read"]},
-    {"name": "Orbit HR", "scopes": ["auth:legacy", "employees:read"]}
-  ],
   "mode": "basic"
 }
 ```
@@ -140,11 +135,6 @@ curl -X POST http://127.0.0.1:8000/v1/translate \
   -d '{
     "raw_text":"Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
     "audience":["cs","support","customer"],
-    "partner_accounts":[
-      {"name":"Northstar Bank","scopes":["auth:legacy","payments:read"]},
-      {"name":"Acme Payroll","scopes":["auth:token.rotate","profile:read"]},
-      {"name":"Orbit HR","scopes":["auth:legacy","employees:read"]}
-    ],
     "mode":"basic"
   }'
 ```
@@ -157,14 +147,11 @@ curl -X POST http://127.0.0.1:8000/v1/translate \
   -d '{
     "raw_text":"Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
     "audience":["cs","support","customer"],
-    "partner_accounts":[
-      {"name":"Northstar Bank","scopes":["auth:legacy","payments:read"]},
-      {"name":"Acme Payroll","scopes":["auth:token.rotate","profile:read"]},
-      {"name":"Orbit HR","scopes":["auth:legacy","employees:read"]}
-    ],
     "mode":"ai"
   }'
 ```
+
+Partner impact mapping is resolved from `app/data/partners_by_scope.json` by matching scopes found in `raw_text`.
 
 ## Documentation index
 - [Architecture](docs/ARCHITECTURE.md)

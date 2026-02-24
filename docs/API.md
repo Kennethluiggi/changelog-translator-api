@@ -16,9 +16,6 @@ All endpoints require `X-API-Key`.
   "tone": "neutral",
   "product_area": "Auth",
   "constraints": "no jargon",
-  "partner_accounts": [
-    {"name": "Northstar Bank", "scopes": ["auth:legacy", "payments:read"]}
-  ],
   "mode": "basic",
   "persona": "cs"
 }
@@ -35,11 +32,14 @@ All endpoints require `X-API-Key`.
     "executive_summary": "...",
     "customer_followups": ["..."],
     "adoption_risks": ["..."],
+    "impacted_scopes": ["auth:legacy", "auth:token.rotate"],
     "impacted_partners": ["Northstar Bank"],
     "partner_email_draft": "Subject: Required OAuth Scope Migration Action ..."
   }
 }
 ```
+
+`impacted_partners` are resolved using internal scope mappings from `app/data/partners_by_scope.json`.
 
 ## Plan behavior
 - Free keys can use `mode=basic`.

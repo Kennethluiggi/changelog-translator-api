@@ -6,6 +6,7 @@ from typing import Protocol
 from urllib import request
 
 from .models import AIEnhancement, TranslateRequest, TranslateResponse
+from .partner_catalog import impacted_partners_for_scopes
 
 
 PROMPT_TEMPLATE = """You are a release communication assistant.
@@ -15,8 +16,9 @@ Generate JSON ONLY with keys:
 - executive_summary: short paragraph for customer-facing teams
 - customer_followups: list of follow-up questions
 - adoption_risks: list of likely rollout/adoption risks
+- impacted_scopes: list of scopes likely impacted (e.g., auth:legacy)
 - impacted_partners: list of partner names likely impacted by scope/auth changes
-- partner_email_draft: concise broadcast email draft to impacted partners
+- partner_email_draft: concise empathetic partner broadcast in Chris Voss style
 Tone: {tone}
 Persona: {persona}
 Constraints: {constraints}
@@ -30,6 +32,17 @@ class AIProvider(Protocol):
         ...
 
 
+def _extract_scopes(text: str) -> list[str]:
+    found = re.findall(r"\b[a-z][a-z0-9_-]*:[a-z0-9_.*-]+\b", text.lower())
+    seen = set()
+    ordered: list[str] = []
+    for scope in found:
+        if scope not in seen:
+            seen.add(scope)
+            ordered.append(scope)
+    return ordered
+
+
 @dataclass
 class MockAIProvider:
     name: str = "mock"
@@ -37,72 +50,43 @@ class MockAIProvider:
     def enhance(self, req: TranslateRequest, baseline: TranslateResponse) -> AIEnhancement:
         raw = req.raw_text
         lower = raw.lower()
-
-        partner_count_match = re.search(r"(\d+)\s+partners?", lower)
-        partner_count = int(partner_count_match.group(1)) if partner_count_match else None
-
-        partner_names: list[str] = []
-        names_match = re.search(r"partners?\s*[:\-]\s*([^\.\n]+)", raw, flags=re.IGNORECASE)
-        if names_match:
-            partner_names = [n.strip() for n in names_match.group(1).split(",") if n.strip()]
+        scopes = _extract_scopes(raw)
+        impacted_partners = impacted_partners_for_scopes(scopes)
 
         oauth_context = any(token in lower for token in ["oauth", "token", "sso", "auth"])
 
-        impacted_partners: list[str] = []
-        if req.partner_accounts:
-            baseline_scopes = " ".join(
-                [*baseline.cs_summary, *baseline.support_notes, *baseline.customer_summary, req.raw_text]
-            ).lower()
-            for partner in req.partner_accounts:
-                partner_scopes = [s.strip().lower() for s in partner.scopes if s.strip()]
-                if any(scope and scope in baseline_scopes for scope in partner_scopes):
-                    impacted_partners.append(partner.name)
-
         if oauth_context:
-            partner_scope = "multiple partner integrations"
-            if partner_count is not None and partner_names:
-                partner_scope = f"{partner_count} partner integrations ({', '.join(partner_names[:3])})"
-            elif partner_count is not None:
-                partner_scope = f"{partner_count} partner integrations"
-            elif partner_names:
-                partner_scope = f"partner integrations ({', '.join(partner_names[:3])})"
-
-            executive_summary = (
-                "This OAuth security hardening release modernizes authentication flows and narrows "
-                "token misuse risk by enforcing stronger token lifecycle controls. "
-                f"Operationally, this may affect {partner_scope} that rely on the prior auth pattern. "
-                "Customer-facing teams should proactively communicate migration timing, expected sign-in "
-                "behavior changes, and support readiness for integration owners."
-            )
-
-            followups = [
-                "Which partners are still using legacy OAuth token endpoints?",
-                "Have partner engineering teams validated refresh-token rotation handling in staging?",
-                "Do support teams have a partner-specific rollback and escalation contact matrix?",
-            ]
-            if partner_names:
-                followups.insert(0, f"Confirm outreach status for partner accounts: {', '.join(partner_names[:5])}.")
-
-            adoption_risks = [
-                "Partner integrations on deprecated OAuth paths may fail authentication.",
-                "Token rotation timing mismatches can produce intermittent 401/403 auth errors.",
-                "Delayed partner testing could increase launch-week support volume.",
-            ]
-            email_partner_segment = ", ".join(impacted_partners[:8]) if impacted_partners else "our impacted integration partners"
-
+            scope_phrase = ", ".join(scopes) if scopes else "authentication scopes"
+            partner_phrase = ", ".join(impacted_partners[:8]) if impacted_partners else "integration partners using impacted scopes"
             return AIEnhancement(
-                executive_summary=executive_summary,
-                customer_followups=followups,
-                adoption_risks=adoption_risks,
+                executive_summary=(
+                    "This release introduces OAuth scope hardening and token-policy changes that reduce auth abuse risk "
+                    "while increasing near-term migration pressure on external integrations. "
+                    f"Most likely impacted scopes: {scope_phrase}. "
+                    f"Likely impacted partners: {partner_phrase}."
+                ),
+                customer_followups=[
+                    f"Which partner owners are accountable for validating scopes: {scope_phrase}?",
+                    "What migration timeline can we confidently communicate without increasing customer anxiety?",
+                    "Where do we expect the highest ticket surge if partners delay testing?",
+                ],
+                adoption_risks=[
+                    "Legacy OAuth scope usage can produce partner auth failures after cutoff.",
+                    "Partial migration may lead to intermittent 401/403 errors and customer confusion.",
+                    "Insufficient partner outreach can increase avoidable escalations during rollout.",
+                ],
+                impacted_scopes=scopes,
                 impacted_partners=impacted_partners,
                 partner_email_draft=(
-                    "Subject: Required OAuth Scope Migration Action\n\n"
-                    "Hello Partner Team,\n\n"
-                    "We are rolling out OAuth token and scope-policy updates that may affect your current integration. "
-                    "Please review your configured scopes, validate token rotation behavior in staging, and complete "
-                    "migration testing before the published cutoff date.\n\n"
-                    f"This notice applies to: {email_partner_segment}.\n\n"
-                    "If your team needs support, reply to this message and our integration specialists will assist.\n\n"
+                    "Subject: Quick alignment on upcoming OAuth scope changes\n\n"
+                    "Hi Partner Team,\n\n"
+                    "It sounds like reliability during this transition matters to you, and we want to make sure you have "
+                    "everything needed before enforcement begins. We are updating OAuth token handling and deprecating "
+                    "legacy scope paths, which may affect your current integration behavior.\n\n"
+                    f"Scopes to validate now: {scope_phrase}.\n"
+                    f"This notice is intended for: {partner_phrase}.\n\n"
+                    "The good news is most teams can complete validation quickly in staging. If useful, we can walk "
+                    "through your migration checklist together and confirm a safe production timeline.\n\n"
                     "Best,\nPartner Engineering"
                 ),
             )
@@ -115,7 +99,8 @@ class MockAIProvider:
             ),
             customer_followups=baseline.follow_up_questions[:3],
             adoption_risks=baseline.risk_flags[:3],
-            impacted_partners=[],
+            impacted_scopes=scopes,
+            impacted_partners=impacted_partners,
             partner_email_draft=(
                 "Subject: Product Update Notice\n\n"
                 "Hello Partner Team,\n\n"

@@ -1,0 +1,20 @@
+{
+  "partners": [
+    {
+      "name": "Northstar Bank",
+      "scopes": ["auth:legacy", "payments:read", "payments:write"]
+    },
+    {
+      "name": "Acme Payroll",
+      "scopes": ["auth:token.rotate", "profile:read", "employees:read"]
+    },
+    {
+      "name": "Orbit HR",
+      "scopes": ["auth:legacy", "employees:read", "employees:write"]
+    },
+    {
+      "name": "Helios Marketplace",
+      "scopes": ["orders:read", "orders:write", "auth:token.rotate"]
+    }
+  ]
+}

@@ -28,8 +28,6 @@ class PartnerAccount(BaseModel):
     scopes: List[str] = Field(default_factory=list)
 
 
-TranslateRequest.model_rebuild()
-
 class ExtractedChange(BaseModel):
     type: ChangeType
     area: str = Field(..., min_length=1)
@@ -40,6 +38,7 @@ class AIEnhancement(BaseModel):
     executive_summary: str = Field(..., min_length=1)
     customer_followups: List[str] = Field(default_factory=list)
     adoption_risks: List[str] = Field(default_factory=list)
+    impacted_scopes: List[str] = Field(default_factory=list)
     impacted_partners: List[str] = Field(default_factory=list)
     partner_email_draft: str = Field(..., min_length=1)
 
