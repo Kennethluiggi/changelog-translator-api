@@ -78,15 +78,9 @@ python -m uvicorn app.main:app --reload
 
 ---
 
-## Demo section (replace after recording)
-- Video link: [Watch 60-second demo](PASTE_GITHUB_VIDEO_URL_HERE)
-- Optional GIF asset: `docs/demo.gif`
+## Demo section 
+- Video link: [Watch 60-second demo](https://github.com/user-attachments/assets/992fc0a8-5070-4979-b60f-97e26ec387da)
 
-Tip: Upload your video by dragging it into a GitHub issue comment, then paste the generated URL above.
-
----
-
-## Postman demo script (for interview walkthrough)
 
 ### Request 1 — Health check with valid key
 - **Method/Path:** `GET /health`
