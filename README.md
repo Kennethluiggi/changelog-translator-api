@@ -1,3 +1,4 @@
+```
 # Changelog Translator API
 
 Structured FastAPI service that turns raw engineering release notes into actionable impact briefs for customer-facing teams.
@@ -25,6 +26,7 @@ AI_PROVIDER=mock
 # OPENAI_API_KEY=...
 # OPENAI_MODEL=gpt-4o-mini
 ```
+```
 
 ### 2) Create virtual environment
 
@@ -33,30 +35,30 @@ AI_PROVIDER=mock
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
-
+```
 If activation is blocked, run:
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
-
+```
 **macOS / Linux**
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
-
+```
 ### 3) Install dependencies
 ```bash
 python -m pip install --upgrade pip
 python -m pip install fastapi uvicorn pydantic python-dotenv
 ```
-
+```
 ### 4) Start API locally
 ```bash
 python -m uvicorn app.main:app --reload
 ```
-
+```
 ### 5) Open docs
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - Health endpoint: `http://127.0.0.1:8000/health`
@@ -83,6 +85,7 @@ python -m uvicorn app.main:app --reload
   "mode": "basic"
 }
 ```
+```
 - Show fields: `extracted_changes`, `risk_flags`, `impact_level`
 
 ### Request 4: AI mode blocked on free key
@@ -107,7 +110,7 @@ curl -X POST http://127.0.0.1:8000/v1/translate \
     "mode":"ai"
   }'
 ```
-
+```
 ## Documentation
 - `docs/ARCHITECTURE.md`
 - `docs/API.md`
