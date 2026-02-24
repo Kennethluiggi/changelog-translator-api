@@ -17,6 +17,15 @@ class TranslateRequest(BaseModel):
     constraints: Optional[str] = Field(None, description="Optional constraints (e.g., 'no jargon', 'bullet points').")
     mode: Mode = Field("basic", description="basic = rule-based, ai = AI-enhanced (pro only)")
     persona: Optional[Persona] = Field(None, description="Persona targeting (used by AI mode)")
+    partner_accounts: List["PartnerAccount"] = Field(
+        default_factory=list,
+        description="Optional partner catalog with known OAuth/API scopes for impact mapping.",
+    )
+
+
+class PartnerAccount(BaseModel):
+    name: str = Field(..., min_length=1)
+    scopes: List[str] = Field(default_factory=list)
 
 
 class ExtractedChange(BaseModel):
