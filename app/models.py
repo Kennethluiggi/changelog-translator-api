@@ -30,7 +30,6 @@ class PartnerAccount(BaseModel):
 
 TranslateRequest.model_rebuild()
 
-
 class ExtractedChange(BaseModel):
     type: ChangeType
     area: str = Field(..., min_length=1)
