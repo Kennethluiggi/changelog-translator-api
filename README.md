@@ -1,23 +1,33 @@
 # Changelog Translator API
 
-Structured FastAPI service that turns raw engineering release notes into actionable impact briefs for customer-facing teams.
+A FastAPI service that converts raw engineering release notes into structured, customer-facing impact briefs.
 
-## Highlights
-- Deterministic translation engine (default)
-- Optional AI enhancement layer with provider abstraction
-- API key authentication with free/pro plan controls
+## Why this project exists
+Engineering changelogs are often technical and inconsistent. This API standardizes that input into a repeatable format for Customer Success, Product, and Account teams.
+
+## Core capabilities
+- Deterministic changelog translation (default behavior)
+- Optional AI enhancement layer (safe, additive, and provider-based)
+- API key authentication with free/pro plan separation
 - Fixed-window rate limiting
-- Structured request/response contracts via Pydantic
+- Structured request and response contracts (Pydantic)
 
-## Demo
-- Add your short clip after recording:
-  - `[Watch 60-second demo](PASTE_GITHUB_VIDEO_URL_HERE)`
-  - or `![Demo GIF](docs/demo.gif)`
+## Architecture at a glance
+1. Request enters FastAPI route.
+2. API key is validated (`401` on missing/invalid key).
+3. Rate limit is enforced (`429` when exceeded).
+4. Deterministic translator builds baseline response.
+5. If `mode="ai"` and caller is `pro`, optional AI enhancement is attempted.
+6. If AI fails, deterministic output still returns with fallback metadata.
 
-## Run the server (step-by-step)
+See detailed diagrams in [`docs/FLOWCHART.md`](docs/FLOWCHART.md).
+
+---
+
+## Quick start
 
 ### 1) Create `.env` in the project root
-```bash
+```env
 FREE_API_KEYS=free_demo_key
 PRO_API_KEYS=pro_demo_key
 APP_VERSION=0.1.0
@@ -26,15 +36,15 @@ AI_PROVIDER=mock
 # OPENAI_MODEL=gpt-4o-mini
 ```
 
-### 2) Create virtual environment
+### 2) Create and activate virtual environment
 
-**Windows PowerShell**
+**Windows (PowerShell)**
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-If activation is blocked, run:
+If activation is blocked:
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
@@ -52,30 +62,42 @@ python -m pip install --upgrade pip
 python -m pip install fastapi uvicorn pydantic python-dotenv
 ```
 
-### 4) Start API locally
+### 4) Run the API
 ```bash
 python -m uvicorn app.main:app --reload
 ```
 
-### 5) Open docs
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- Health endpoint: `http://127.0.0.1:8000/health`
+### 5) Open local endpoints
+- Swagger UI: http://127.0.0.1:8000/docs
+- Health: http://127.0.0.1:8000/health
+- Version: http://127.0.0.1:8000/version
 
-## Video demo test plan (what to show in Postman)
+---
 
-### Request 1: health works with API key
-- `GET /health`
-- Header: `X-API-Key: free_demo_key`
-- Expect: `200` + `{ "status": "ok" }`
+## Demo section (replace after recording)
+- Video link: [Watch 60-second demo](PASTE_GITHUB_VIDEO_URL_HERE)
+- Optional GIF asset: `docs/demo.gif`
 
-### Request 2: auth check
-- `GET /health` without `X-API-Key`
-- Expect: `401` (missing key)
+Tip: Upload your video by dragging it into a GitHub issue comment, then paste the generated URL above.
 
-### Request 3: deterministic translate (free plan)
-- `POST /v1/translate`
-- Header: `X-API-Key: free_demo_key`
-- Body:
+---
+
+## Postman demo script (for interview walkthrough)
+
+### Request 1 — Health check with valid key
+- **Method/Path:** `GET /health`
+- **Header:** `X-API-Key: free_demo_key`
+- **Expected:** `200` and `{"status":"ok"}`
+
+### Request 2 — Auth failure path
+- **Method/Path:** `GET /health`
+- **Header:** *(none)*
+- **Expected:** `401` (missing API key)
+
+### Request 3 — Deterministic translation (free)
+- **Method/Path:** `POST /v1/translate`
+- **Header:** `X-API-Key: free_demo_key`
+- **Body:**
 ```json
 {
   "raw_text": "Added OAuth token rotation. Breaking: old endpoint removed.",
@@ -83,18 +105,19 @@ python -m uvicorn app.main:app --reload
   "mode": "basic"
 }
 ```
-- Show fields: `extracted_changes`, `risk_flags`, `impact_level`
+- **Expected:** `200`, with deterministic fields like `extracted_changes`, `risk_flags`, and `impact_level`
 
-### Request 4: AI mode blocked on free key
-- Same body but `"mode": "ai"`
-- Header: `X-API-Key: free_demo_key`
-- Expect: `403` (pro required)
+### Request 4 — AI gated for free plan
+- Same body as Request 3, but set `"mode": "ai"`
+- **Header:** `X-API-Key: free_demo_key`
+- **Expected:** `403` (AI mode requires pro)
 
-### Request 5: AI mode with pro key (mock provider)
-- Same body but `"mode": "ai"`
-- Header: `X-API-Key: pro_demo_key`
-- Expect: `200`
-- Show fields: `ai_provider`, `ai_enhancement`, `ai_fallback_used`
+### Request 5 — AI enhancement path (pro + mock)
+- Same body as Request 3, but set `"mode": "ai"`
+- **Header:** `X-API-Key: pro_demo_key`
+- **Expected:** `200`, with `ai_provider`, `ai_enhancement`, `ai_fallback_used`
+
+---
 
 ## Curl quick check
 ```bash
@@ -108,9 +131,9 @@ curl -X POST http://127.0.0.1:8000/v1/translate \
   }'
 ```
 
-## Documentation
-- `docs/ARCHITECTURE.md`
-- `docs/FLOWCHART.md`
-- `docs/API.md`
-- `docs/AI.md`
-- `docs/EVALS.md`
+## Documentation index
+- [Architecture](docs/ARCHITECTURE.md)
+- [Flowcharts](docs/FLOWCHART.md)
+- [API Contract](docs/API.md)
+- [AI Layer](docs/AI.md)
+- [Evaluation Checklist](docs/EVALS.md)
