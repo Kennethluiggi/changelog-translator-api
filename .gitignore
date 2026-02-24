@@ -1,4 +1,3 @@
-@"
 # env files (do not commit secrets)
 .env
 .env.*
@@ -10,4 +9,6 @@ __pycache__/
 # virtual environments
 .venv/
 venv/
-"@ | Set-Content .gitignore
+
+# tooling
+.pytest_cache/
