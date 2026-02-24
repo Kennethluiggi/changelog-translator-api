@@ -17,7 +17,18 @@ class TranslateRequest(BaseModel):
     constraints: Optional[str] = Field(None, description="Optional constraints (e.g., 'no jargon', 'bullet points').")
     mode: Mode = Field("basic", description="basic = rule-based, ai = AI-enhanced (pro only)")
     persona: Optional[Persona] = Field(None, description="Persona targeting (used by AI mode)")
+    partner_accounts: List["PartnerAccount"] = Field(
+        default_factory=list,
+        description="Optional partner catalog with known OAuth/API scopes for impact mapping.",
+    )
 
+
+class PartnerAccount(BaseModel):
+    name: str = Field(..., min_length=1)
+    scopes: List[str] = Field(default_factory=list)
+
+
+TranslateRequest.model_rebuild()
 
 class ExtractedChange(BaseModel):
     type: ChangeType
@@ -29,6 +40,8 @@ class AIEnhancement(BaseModel):
     executive_summary: str = Field(..., min_length=1)
     customer_followups: List[str] = Field(default_factory=list)
     adoption_risks: List[str] = Field(default_factory=list)
+    impacted_partners: List[str] = Field(default_factory=list)
+    partner_email_draft: str = Field(..., min_length=1)
 
 
 class TranslateResponse(BaseModel):
