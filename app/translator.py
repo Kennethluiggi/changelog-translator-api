@@ -150,20 +150,40 @@ def build_follow_up_questions(risks: List[str]) -> List[str]:
     return questions
 
 
+def detect_scopes(text: str) -> List[str]:
+    found = re.findall(r"\b[a-z][a-z0-9_-]*:[a-z0-9_.*-]+\b", text.lower())
+    seen = set()
+    ordered: List[str] = []
+    for scope in found:
+        if scope not in seen:
+            seen.add(scope)
+            ordered.append(scope)
+    return ordered
+
+
 def translate(req: TranslateRequest) -> TranslateResponse:
     lines = [normalize_text(line) for line in split_into_lines(req.raw_text)]
     normalized_text = normalize_text(req.raw_text)
 
     extracted = extract_changes(lines, req.product_area)
     risks = detect_risks(normalized_text)
+    scopes = detect_scopes(normalized_text)
     impact_level = impact_from_risks(risks)
+
+    follow_ups = build_follow_up_questions(risks)
+    if scopes:
+        follow_ups.append(f"Which partners are mapped to these scopes: {', '.join(scopes)}?")
+
+    support_notes = build_support_notes(extracted) if "support" in req.audience else []
+    if scopes and support_notes:
+        support_notes.append(f"Scope watchlist: {', '.join(scopes)}")
 
     response = TranslateResponse(
         cs_summary=build_cs_summary(extracted) if "cs" in req.audience else [],
-        support_notes=build_support_notes(extracted) if "support" in req.audience else [],
+        support_notes=support_notes,
         customer_summary=build_customer_summary(extracted) if "customer" in req.audience else [],
         risk_flags=risks,
-        follow_up_questions=build_follow_up_questions(risks),
+        follow_up_questions=follow_ups,
         extracted_changes=extracted,
         impact_level=impact_level,
     )

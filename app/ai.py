@@ -15,6 +15,8 @@ Generate JSON ONLY with keys:
 - executive_summary: short paragraph for customer-facing teams
 - customer_followups: list of follow-up questions
 - adoption_risks: list of likely rollout/adoption risks
+- impacted_partners: list of partner names likely impacted by scope/auth changes
+- partner_email_draft: concise broadcast email draft to impacted partners
 Tone: {tone}
 Persona: {persona}
 Constraints: {constraints}
@@ -46,6 +48,16 @@ class MockAIProvider:
 
         oauth_context = any(token in lower for token in ["oauth", "token", "sso", "auth"])
 
+        impacted_partners: list[str] = []
+        if req.partner_accounts:
+            baseline_scopes = " ".join(
+                [*baseline.cs_summary, *baseline.support_notes, *baseline.customer_summary, req.raw_text]
+            ).lower()
+            for partner in req.partner_accounts:
+                partner_scopes = [s.strip().lower() for s in partner.scopes if s.strip()]
+                if any(scope and scope in baseline_scopes for scope in partner_scopes):
+                    impacted_partners.append(partner.name)
+
         if oauth_context:
             partner_scope = "multiple partner integrations"
             if partner_count is not None and partner_names:
@@ -76,10 +88,23 @@ class MockAIProvider:
                 "Token rotation timing mismatches can produce intermittent 401/403 auth errors.",
                 "Delayed partner testing could increase launch-week support volume.",
             ]
+            email_partner_segment = ", ".join(impacted_partners[:8]) if impacted_partners else "our impacted integration partners"
+
             return AIEnhancement(
                 executive_summary=executive_summary,
                 customer_followups=followups,
                 adoption_risks=adoption_risks,
+                impacted_partners=impacted_partners,
+                partner_email_draft=(
+                    "Subject: Required OAuth Scope Migration Action\n\n"
+                    "Hello Partner Team,\n\n"
+                    "We are rolling out OAuth token and scope-policy updates that may affect your current integration. "
+                    "Please review your configured scopes, validate token rotation behavior in staging, and complete "
+                    "migration testing before the published cutoff date.\n\n"
+                    f"This notice applies to: {email_partner_segment}.\n\n"
+                    "If your team needs support, reply to this message and our integration specialists will assist.\n\n"
+                    "Best,\nPartner Engineering"
+                ),
             )
 
         return AIEnhancement(
@@ -90,6 +115,14 @@ class MockAIProvider:
             ),
             customer_followups=baseline.follow_up_questions[:3],
             adoption_risks=baseline.risk_flags[:3],
+            impacted_partners=[],
+            partner_email_draft=(
+                "Subject: Product Update Notice\n\n"
+                "Hello Partner Team,\n\n"
+                "We are sharing an upcoming platform update. Please validate your integration against "
+                "the latest release notes in your staging environment.\n\n"
+                "Best,\nPartner Engineering"
+            ),
         )
 
 

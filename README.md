@@ -20,6 +20,10 @@ Engineering changelogs are often technical and inconsistent. This API standardiz
 5. If `mode="ai"` and caller is `pro`, optional AI enhancement is attempted.
 6. If AI fails, deterministic output still returns with fallback metadata.
 
+> Same input text can produce different outputs by design:
+> - `mode="basic"` returns deterministic, concise, scope/risk-focused output.
+> - `mode="ai"` returns an enriched executive narrative with impacted partner mapping and a ready-to-send partner email draft.
+
 See detailed diagrams in [`docs/FLOWCHART.md`](docs/FLOWCHART.md).
 
 ---
@@ -100,13 +104,18 @@ Tip: Upload your video by dragging it into a GitHub issue comment, then paste th
 - **Body:**
 ```json
 {
-  "raw_text": "Changed OAuth token rotation policy and removed legacy token endpoint. Breaking: partners must migrate by June 30. Affected partners: Northstar Bank, Acme Payroll, Orbit HR.",
+  "raw_text": "Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
   "audience": ["cs", "support", "customer"],
+  "partner_accounts": [
+    {"name": "Northstar Bank", "scopes": ["auth:legacy", "payments:read"]},
+    {"name": "Acme Payroll", "scopes": ["auth:token.rotate", "profile:read"]},
+    {"name": "Orbit HR", "scopes": ["auth:legacy", "employees:read"]}
+  ],
   "mode": "basic"
 }
 ```
 - **Expected:** `200`, with deterministic fields like `extracted_changes`, `risk_flags`, and `impact_level`.
-- **How it should read:** concise, structured, and rule-based.
+- **How it should read:** concise, structured, and rule-based (includes scope watchlist/follow-up prompt, but no generated partner email draft).
 
 ### Request 4 — AI gated for free plan
 - Same body as Request 3, but set `"mode": "ai"`
@@ -117,7 +126,7 @@ Tip: Upload your video by dragging it into a GitHub issue comment, then paste th
 - Same body as Request 3, but set `"mode": "ai"`
 - **Header:** `X-API-Key: pro_demo_key`
 - **Expected:** `200`, with `ai_provider`, `ai_enhancement`, `ai_fallback_used`.
-- **How it should read:** more executive/professional narrative, with explicit OAuth impact framing and partner-focused follow-ups.
+- **How it should read:** more executive/professional narrative, plus `ai_enhancement.impacted_partners` and `ai_enhancement.partner_email_draft`.
 
 ---
 
@@ -129,8 +138,13 @@ curl -X POST http://127.0.0.1:8000/v1/translate \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: free_demo_key' \
   -d '{
-    "raw_text":"Changed OAuth token rotation policy and removed legacy token endpoint. Breaking: partners must migrate by June 30. Affected partners: Northstar Bank, Acme Payroll, Orbit HR.",
+    "raw_text":"Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
     "audience":["cs","support","customer"],
+    "partner_accounts":[
+      {"name":"Northstar Bank","scopes":["auth:legacy","payments:read"]},
+      {"name":"Acme Payroll","scopes":["auth:token.rotate","profile:read"]},
+      {"name":"Orbit HR","scopes":["auth:legacy","employees:read"]}
+    ],
     "mode":"basic"
   }'
 ```
@@ -141,8 +155,13 @@ curl -X POST http://127.0.0.1:8000/v1/translate \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: pro_demo_key' \
   -d '{
-    "raw_text":"Changed OAuth token rotation policy and removed legacy token endpoint. Breaking: partners must migrate by June 30. Affected partners: Northstar Bank, Acme Payroll, Orbit HR.",
+    "raw_text":"Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
     "audience":["cs","support","customer"],
+    "partner_accounts":[
+      {"name":"Northstar Bank","scopes":["auth:legacy","payments:read"]},
+      {"name":"Acme Payroll","scopes":["auth:token.rotate","profile:read"]},
+      {"name":"Orbit HR","scopes":["auth:legacy","employees:read"]}
+    ],
     "mode":"ai"
   }'
 ```

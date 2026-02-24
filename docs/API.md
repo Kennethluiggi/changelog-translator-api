@@ -16,6 +16,9 @@ All endpoints require `X-API-Key`.
   "tone": "neutral",
   "product_area": "Auth",
   "constraints": "no jargon",
+  "partner_accounts": [
+    {"name": "Northstar Bank", "scopes": ["auth:legacy", "payments:read"]}
+  ],
   "mode": "basic",
   "persona": "cs"
 }
@@ -31,7 +34,9 @@ All endpoints require `X-API-Key`.
   "ai_enhancement": {
     "executive_summary": "...",
     "customer_followups": ["..."],
-    "adoption_risks": ["..."]
+    "adoption_risks": ["..."],
+    "impacted_partners": ["Northstar Bank"],
+    "partner_email_draft": "Subject: Required OAuth Scope Migration Action ..."
   }
 }
 ```
