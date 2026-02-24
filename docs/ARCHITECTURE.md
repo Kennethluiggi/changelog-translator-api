@@ -3,6 +3,8 @@
 ## Flow
 Input changelog text → deterministic parser → structured `TranslateResponse` → optional AI enhancement.
 
+For a shareable visual diagram, see `docs/FLOWCHART.md`.
+
 ## Components
 - `app/main.py`: FastAPI routes and plan gating.
 - `app/auth.py`: API key authentication and plan resolution.
