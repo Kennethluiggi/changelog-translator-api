@@ -98,18 +98,17 @@ def extract_changes(lines: List[str], product_area: str | None) -> List[Extracte
     extracted = []
 
     for line in lines:
-        change_type = detect_change_type(line)
-        cleaned = re.sub(
-            r"^(added|fixed|changed|deprecated|security|breaking change)\s*:?\s*",
-            "",
-            line,
-            flags=re.IGNORECASE,
-        )
+        cleaned = line.strip()
+
+        if not cleaned:
+            continue
+
+        change_type = detect_change_type(cleaned)
 
         extracted.append(
             ExtractedChange(
                 type=change_type,
-                area=product_area or infer_area(line),
+                area=product_area or infer_area(cleaned),
                 description=cleaned,
             )
         )
@@ -191,8 +190,15 @@ def translate(req: TranslateRequest) -> TranslateResponse:
     if req.mode == "ai":
         provider = get_provider()
         response.ai_provider = provider.name
+
+        # NEW FIELDS
+        response.ai_model = getattr(provider, "model", None)
+        response.ai_prompt_version = getattr(provider, "prompt_version", None)
+        response.ai_error_message = None
+
         try:
             response.ai_enhancement = provider.enhance(req, response)
+
             if response.ai_enhancement.impacted_scopes:
                 scope_phrase = ", ".join(response.ai_enhancement.impacted_scopes)
                 if response.cs_summary:
@@ -201,10 +207,13 @@ def translate(req: TranslateRequest) -> TranslateResponse:
                     response.support_notes.append(
                         f"AI/PRO escalation guidance — prioritize tickets tied to scopes: {scope_phrase}."
                     )
+
             if response.ai_enhancement.impacted_partners and response.customer_summary:
                 partners = ", ".join(response.ai_enhancement.impacted_partners[:6])
                 response.customer_summary.append(f"AI/PRO impacted partners: {partners}.")
-        except Exception:
-            response.ai_fallback_used = True
 
+        except Exception as e:
+            response.ai_fallback_used = True
+            response.ai_error_message = str(e)
+            print(f"[AI ERROR] {type(e).__name__}: {e}")
     return response

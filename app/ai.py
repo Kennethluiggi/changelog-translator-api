@@ -1,5 +1,6 @@
 import json
 import os
+from openai import OpenAI
 import re
 from dataclasses import dataclass
 from typing import Protocol
@@ -113,46 +114,51 @@ class MockAIProvider:
 
 @dataclass
 class OpenAIProvider:
-    name: str = "openai"
+    def __init__(self):
+        self.name = "openai"
+        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.prompt_version = "v1"
 
-    def enhance(self, req: TranslateRequest, baseline: TranslateResponse) -> AIEnhancement:
-        api_key = os.getenv("OPENAI_API_KEY")
-        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY is required for openai provider")
+    def enhance(self, req: TranslateRequest, base: TranslateResponse) -> AIEnhancement:
+        prompt = self._build_prompt(req, base)
 
-        prompt = PROMPT_TEMPLATE.format(
-            raw_text=req.raw_text,
-            baseline=baseline.model_dump_json(indent=2),
-            tone=req.tone,
-            persona=req.persona or "general",
-            constraints=req.constraints or "none",
+        response = self.client.responses.create(
+            model=self.model,
+            input=prompt,
         )
 
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "Return strict JSON only."},
-                {"role": "user", "content": prompt},
-            ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0,
-        }
-        req_http = request.Request(
-            "https://api.openai.com/v1/chat/completions",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
+        content = response.output[0].content[0].text
+        print("[AI RAW CONTENT]", content)
 
-        with request.urlopen(req_http, timeout=20) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
+        enhancement = AIEnhancement.model_validate_json(content)
 
-        content = body["choices"][0]["message"]["content"]
-        return AIEnhancement.model_validate_json(content)
+        return enhancement
+
+    def _build_prompt(self, req: TranslateRequest, base: TranslateResponse) -> str:
+        return f"""
+        You are an API that returns ONLY valid JSON.
+        Do not include markdown.
+        Do not include explanations.
+        Return exactly one JSON object matching this schema.
+
+        Changelog:
+        {req.raw_text}
+
+        Extracted Changes:
+        {base.extracted_changes}
+
+        Risk Flags:
+        {base.risk_flags}
+
+        Return JSON in this exact format:
+        {{
+        "executive_summary": "",
+        "impacted_scopes": [],
+        "impacted_partners": [],
+        "partner_email_draft": ""
+        }}
+        """
 
 
 def get_provider() -> AIProvider:

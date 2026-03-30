@@ -54,3 +54,6 @@ class TranslateResponse(BaseModel):
     ai_enhancement: Optional[AIEnhancement] = None
     ai_provider: Optional[str] = None
     ai_fallback_used: bool = False
+    ai_model: str | None = None
+    ai_prompt_version: str | None = None
+    ai_error_message: str | None = None
