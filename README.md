@@ -1,155 +1,111 @@
 # Changelog Translator API
 
-A FastAPI service that converts raw engineering release notes into structured, customer-facing impact briefs.
+**Stack:** Python · FastAPI · PostgreSQL · Pydantic · OpenAI API · psycopg2 · python-dotenv
 
-## Why this project exists
-Engineering changelogs are often technical and inconsistent. This API standardizes that input into a repeatable format for Customer Success, Product, and Account teams.
+Changelog Translator API converts raw, engineering-first release notes into structured communication outputs for customer-facing teams. It is designed to show production-minded API design with deterministic logic, optional LLM enrichment, and clear operational signals.
 
-## Core capabilities
-- Deterministic changelog translation (default behavior)
-- Optional AI enhancement layer (safe, additive, and provider-based)
-- API key authentication with free/pro plan separation
-- Fixed-window rate limiting
-- Structured request and response contracts (Pydantic)
+## Problem this project solves
+Engineering changelog text is often inconsistent and too technical for customer-facing workflows. This service standardizes release notes into:
+- audience-specific summaries,
+- risk flags,
+- follow-up prompts,
+- optional AI-enhanced communication assets.
 
-## Architecture at a glance
-1. Request enters FastAPI route.
-2. API key is validated (`401` on missing/invalid key).
-3. Rate limit is enforced (`429` when exceeded).
-4. Deterministic translator builds baseline response.
-5. If `mode="ai"` and caller is `pro`, optional AI enhancement is attempted.
-6. If AI fails, deterministic output still returns with fallback metadata.
+## What this API produces
+For a single changelog input, the API returns:
 
-> Same input text can produce different outputs by design:
-> - `mode="basic"` returns deterministic, concise, scope/risk-focused output.
-> - `mode="ai"` returns an enriched executive narrative with impacted partner mapping (from internal scope catalog) and a ready-to-send empathetic partner email draft.
+- Structured extracted changes (type, area, description)
+- Risk flags (e.g., breaking changes, authentication impact)
+- Impact level classification (low / medium / high)
+- Audience-specific summaries:
+  - Customer Success
+  - Support
+  - Customer-facing messaging
+- Follow-up questions for operational teams
+- Optional AI-enhanced output:
+  - Executive summary
+  - Partner impact mapping
+  - Ready-to-send partner communication draft
 
-See detailed diagrams in [`docs/FLOWCHART.md`](docs/FLOWCHART.md).
+## Example
+Input:
 
----
-
-## Quick start
-
-### 1) Create `.env` in the project root
-```env
-FREE_API_KEYS=free_demo_key
-PRO_API_KEYS=pro_demo_key
-APP_VERSION=0.1.0
-AI_PROVIDER=mock
-# OPENAI_API_KEY=...
-# OPENAI_MODEL=gpt-4o-mini
-```
-
-### 2) Create and activate virtual environment
-
-**Windows (PowerShell)**
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-If activation is blocked:
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-**macOS / Linux**
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-### 3) Install dependencies
-```bash
-python -m pip install --upgrade pip
-python -m pip install fastapi uvicorn pydantic python-dotenv
-```
-
-### 4) Run the API
-```bash
-python -m uvicorn app.main:app --reload
-```
-
-### 5) Open local endpoints
-- Swagger UI: http://127.0.0.1:8000/docs
-- Health: http://127.0.0.1:8000/health
-- Version: http://127.0.0.1:8000/version
-
----
-
-## Demo section 
-- Video link: [Watch 60-second demo](https://github.com/user-attachments/assets/992fc0a8-5070-4979-b60f-97e26ec387da)
-
-
-### Request 1 — Health check with valid key
-- **Method/Path:** `GET /health`
-- **Header:** `X-API-Key: free_demo_key`
-- **Expected:** `200` and `{"status":"ok"}`
-
-### Request 2 — Auth failure path
-- **Method/Path:** `GET /health`
-- **Header:** *(none)*
-- **Expected:** `401` (missing API key)
-
-### Request 3 — Deterministic translation (free)
-- **Method/Path:** `POST /v1/translate`
-- **Header:** `X-API-Key: free_demo_key`
-- **Body:**
 ```json
 {
-  "raw_text": "Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
+  "raw_text": "Deprecated scope auth:legacy. Introduced auth:token.rotate. Breaking change.",
   "audience": ["cs", "support", "customer"],
-  "mode": "basic"
+  "mode": "ai"
 }
 ```
-- **Expected:** `200`, with deterministic fields like `extracted_changes`, `risk_flags`, and `impact_level`.
-- **How it should read:** concise, structured, and rule-based (includes scope watchlist/follow-up prompt, but no generated partner email draft).
 
-### Request 4 — AI gated for free plan
-- Same body as Request 3, but set `"mode": "ai"`
-- **Header:** `X-API-Key: free_demo_key`
-- **Expected:** `403` (AI mode requires pro)
+Output (shape excerpt):
 
-### Request 5 — AI enhancement path (pro + mock)
-- Same body as Request 3, but set `"mode": "ai"`
-- **Header:** `X-API-Key: pro_demo_key`
-- **Expected:** `200`, with `ai_provider`, `ai_enhancement`, `ai_fallback_used`.
-- **How it should read:** more executive/professional narrative, plus `ai_enhancement.impacted_partners` and `ai_enhancement.partner_email_draft`.
-
----
-
-## Curl quick checks
-
-### Basic mode (free): deterministic output
-```bash
-curl -X POST http://127.0.0.1:8000/v1/translate \
-  -H 'Content-Type: application/json' \
-  -H 'X-API-Key: free_demo_key' \
-  -d '{
-    "raw_text":"Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
-    "audience":["cs","support","customer"],
-    "mode":"basic"
-  }'
+```json
+{
+  "impact_level": "high",
+  "risk_flags": ["breaking change", "authentication impact"],
+  "extracted_changes": [
+    {
+      "type": "deprecated",
+      "area": "Auth",
+      "description": "Deprecated scope auth:legacy"
+    }
+  ],
+  "ai_provider": "mock",
+  "ai_fallback_used": false,
+  "ai_enhancement": {
+    "executive_summary": "...",
+    "impacted_scopes": ["auth:legacy", "auth:token.rotate"],
+    "impacted_partners": ["Northstar Bank"],
+    "partner_email_draft": "Subject: Quick alignment on upcoming OAuth scope changes"
+  }
+}
 ```
 
-### AI mode (pro): enhanced executive output
-```bash
-curl -X POST http://127.0.0.1:8000/v1/translate \
-  -H 'Content-Type: application/json' \
-  -H 'X-API-Key: pro_demo_key' \
-  -d '{
-    "raw_text":"Changed OAuth token rotation policy. Deprecated scope auth:legacy and introduced auth:token.rotate. Breaking: integrations using auth:legacy must migrate by June 30.",
-    "audience":["cs","support","customer"],
-    "mode":"ai"
-  }'
-```
+This reflects the production-minded pattern used by the service: deterministic baseline first, then optional AI enrichment with explicit provider and fallback metadata.
 
-Partner impact mapping is resolved from `app/data/partners_by_scope.json` by matching scopes found in `raw_text`.
+## Design philosophy
+- **Deterministic baseline first:** the system always produces a reliable rule-based response.
+- **AI is additive:** AI mode enriches output, but does not replace core logic.
+- **Fallback preserves reliability:** if AI fails, deterministic output still returns.
+- **Observability matters:** each translation run is logged with mode, plan, outcomes, and AI metadata.
+
+## High-level architecture
+1. FastAPI route receives request.
+2. API key auth resolves caller plan (`free` or `pro`).
+3. Fixed-window rate limit is enforced by plan.
+4. Deterministic translator builds core response.
+5. If `mode="ai"` and caller is `pro`, provider-based AI enhancement is attempted.
+6. Run metadata and response payload are persisted in `translation_runs`.
+
+## Quick start (summary)
+1. Create and activate a virtual environment.
+2. Install dependencies.
+3. Configure environment variables via `.env.example` pattern.
+4. Start server with Uvicorn.
+5. Call authenticated endpoints with `X-API-Key`.
+
+Detailed setup: [docs/QUICKSTART.md](docs/QUICKSTART.md)
+
+## API surface
+- `GET /health`
+- `GET /version`
+- `POST /v1/translate`
+- `GET /v1/history`
+- `GET /v1/metrics/summary`
 
 ## Documentation index
 - [Architecture](docs/ARCHITECTURE.md)
-- [Flowcharts](docs/FLOWCHART.md)
-- [API Contract](docs/API.md)
-- [AI Layer](docs/AI.md)
-- [Evaluation Checklist](docs/EVALS.md)
+- [Request Flows](docs/FLOWS.md)
+- [Database Schema](docs/DATABASE_SCHEMA.md)
+- [AI Layer](docs/AI_LAYER.md)
+- [Auth and Rate Limits](docs/AUTH_AND_RATE_LIMITS.md)
+- [Request/Response Contract](docs/REQUEST_RESPONSE_CONTRACT.md)
+- [Quickstart](docs/QUICKSTART.md)
+- [Demo Walkthrough](docs/DEMO.md)
+- [Evaluation Checklist](docs/EVALUATION_CHECKLIST.md)
+
+## Demo and testing summary
+- Demo-ready curl walkthroughs are provided in [docs/DEMO.md](docs/DEMO.md).
+- Reviewer validation steps are provided in [docs/EVALUATION_CHECKLIST.md](docs/EVALUATION_CHECKLIST.md).
+- Core behavior is covered by deterministic/API tests in `tests/`.
