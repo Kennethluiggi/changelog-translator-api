@@ -1,6 +1,6 @@
 # env files (do not commit secrets)
 .env
-.env.*
+
 
 # python caches
 __pycache__/
@@ -12,3 +12,11 @@ venv/
 
 # tooling
 .pytest_cache/
+
+
+node_modules
+.next
+out
+dist
+.env
+.env.local

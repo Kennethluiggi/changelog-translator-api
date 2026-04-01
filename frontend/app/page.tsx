@@ -1,170 +1,167 @@
 import Link from 'next/link';
+import { HomeHeroDemo } from '@/components/HomeHeroDemo';
+import Image from 'next/image';
 
-const requestExample = `POST /v1/translate
-{
-  "raw_text": "Deprecated scope auth:legacy. Introduced auth:token.rotate. Breaking change.",
-  "audience": ["cs", "support", "customer"],
-  "mode": "ai"
-}`;
-
-const responseExample = `{
-  "impact_level": "high",
-  "risk_flags": ["breaking change", "authentication impact"],
-  "extracted_changes": [
-    {
-      "type": "deprecated",
-      "area": "Auth",
-      "description": "Deprecated scope auth:legacy"
-    }
-  ],
-  "ai_enhancement": {
-    "impacted_scopes": ["auth:legacy", "auth:token.rotate"],
-    "impacted_partners": ["Northstar Bank"]
-  }
-}`;
+const integrations = [
+  'Jira',
+  'Slack',
+  'Salesforce',
+  'OpenAI',
+  'REST APIs',
+  'JSON',
+  'Postgres',
+  'Webhooks',
+  'HubSpot',
+  'Zendesk',
+];
 
 export default function HomePage() {
   return (
-    <main>
-      <section className="hero content-width">
-        <div className="hero-grid">
-          <div className="panel">
-            <span className="eyebrow">Phase 1 public shell</span>
-            <h1>Know which partners are likely impacted the moment engineering ships a change.</h1>
-            <p className="lead">
-              Change Intelligence turns Jira and release signals into partner-impact reasoning,
-              team-ready summaries, and a docs-first developer surface you can actually demo.
+    <main className="home-v2">
+      <section className="home-v2-hero">
+        <div className="content-width home-v2-hero-grid">
+          <div className="home-v2-copy">
+            <p className="home-v2-eyebrow">AI-powered change intelligence</p>
+
+            <h1 className="home-v2-title">
+              See the impact of every
+              <br />
+              engineering change before it
+              <br />
+              reaches your customers
+            </h1>
+
+            <p className="home-v2-subtitle">
+              AI-powered analysis turns release notes and Jira updates into clear,
+              actionable intelligence for customer-facing teams.
             </p>
-            <div className="actions">
-              <Link href="/docs" className="button">
-                Read docs
+
+            <div className="home-v2-actions">
+              <Link href="/docs" className="button home-v2-button-primary">
+                View live demo
               </Link>
-              <Link href="/pricing" className="button-ghost">
-                View pricing
+
+              <Link href="/docs" className="button-ghost home-v2-button-secondary">
+                View API
               </Link>
             </div>
-            <div className="kpi-grid">
-              <div className="kpi">
-                <strong>FastAPI backend</strong>
-                <span className="small">Already built and running</span>
-              </div>
-              <div className="kpi">
-                <strong>Docs-first shell</strong>
-                <span className="small">OpenAI-inspired public structure</span>
-              </div>
-              <div className="kpi">
-                <strong>Private app later</strong>
-                <span className="small">Login and dashboard route already staged</span>
-              </div>
+
+            <div className="home-v2-proof">
+              <span className="home-v2-proof-dot" />
+              <span>Built for engineering, product, customer success, and support teams</span>
             </div>
           </div>
 
-          <div className="panel">
-            <p className="docs-group-title">Canonical demo story</p>
-            <h2>Incoming change</h2>
-            <div className="code-block">
-              <pre>{requestExample}</pre>
-            </div>
-            <h2 style={{ marginTop: 20 }}>System output</h2>
-            <div className="code-block">
-              <pre>{responseExample}</pre>
+          <HomeHeroDemo />
+        </div>
+      </section>
+
+      <section className="home-v2-trust">
+        <div className="content-width">
+          <p className="home-v2-trust-title">Works with tools your team already uses</p>
+
+          <div className="home-v2-marquee">
+            <div className="home-v2-marquee-track">
+              {[...integrations, ...integrations].map((item, index) => (
+                <div key={`${item}-${index}`} className="home-v2-logo-chip">
+                  {item}
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
-      <section className="section content-width">
-        <div className="card-grid">
-          <div className="card">
-            <h2>Who it’s for</h2>
+      <section className="home-v2-system">
+        <div className="content-width">
+          <div className="home-v2-section-heading">
+            <p className="home-v2-section-label">How it works</p>
+            <h2>From engineering change to customer-ready action</h2>
             <p className="text-muted">
-              Customer Success, Support Operations, Product Marketing, API teams, and SaaS
-              businesses with partner or integration exposure.
+              Change Intelligence turns raw release information into a decision-ready layer
+              for the teams that own customer impact.
             </p>
           </div>
-          <div className="card">
-            <h2>Why it matters</h2>
-            <p className="text-muted">
-              Engineering ships. Customer-facing teams find out late. Support gets the first pain.
-              This shell makes the product understandable before the full app is shipped.
-            </p>
-          </div>
-          <div className="card">
-            <h2>What exists now</h2>
-            <p className="text-muted">
-              /health, /version, /v1/translate, /v1/history, /v1/metrics/summary, AI enhancement,
-              rate limiting, and Postgres persistence are already in the backend.
-            </p>
+
+          <div className="home-v2-system-flow">
+            <div className="home-v2-system-node">
+              <p className="home-v2-node-title">Inputs</p>
+              <ul>
+                <li>Jira updates</li>
+                <li>Release notes</li>
+                <li>Manual changelog input</li>
+              </ul>
+            </div>
+
+            <div className="home-v2-system-arrow">→</div>
+
+            <div className="home-v2-system-node featured">
+              <p className="home-v2-node-title">AI-powered intelligence</p>
+              <ul>
+                <li>Change classification</li>
+                <li>Partner impact detection</li>
+                <li>Recommended actions</li>
+              </ul>
+            </div>
+
+            <div className="home-v2-system-arrow">→</div>
+
+            <div className="home-v2-system-node">
+              <p className="home-v2-node-title">Outputs</p>
+              <ul>
+                <li>Executive-ready summaries</li>
+                <li>Support guidance</li>
+                <li>Customer communication prep</li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="section content-width">
-        <div className="hero-grid">
-          <div className="panel">
-            <h2>How it works</h2>
-            <div className="flow">
-              <div className="flow-step">
-                <span className="flow-num">1</span>
-                <div>
-                  <strong>Change enters system</strong>
-                  <p className="text-muted">
-                    Jira, release notes, or manual change text comes into the API.
-                  </p>
-                </div>
-              </div>
-              <div className="flow-step">
-                <span className="flow-num">2</span>
-                <div>
-                  <strong>AI plus rules analyze impact</strong>
-                  <p className="text-muted">
-                    Deterministic extraction runs first, then optional AI enhancement adds impact
-                    reasoning.
-                  </p>
-                </div>
-              </div>
-              <div className="flow-step">
-                <span className="flow-num">3</span>
-                <div>
-                  <strong>Likely affected accounts are surfaced</strong>
-                  <p className="text-muted">
-                    Scope tokens, impact level, and partner reasoning become visible in one place.
-                  </p>
-                </div>
-              </div>
-              <div className="flow-step">
-                <span className="flow-num">4</span>
-                <div>
-                  <strong>Teams act earlier</strong>
-                  <p className="text-muted">
-                    Slack, email, and dashboard visibility are the next layers after this public shell.
-                  </p>
-                </div>
-              </div>
-            </div>
+      <section className="home-v2-audience">
+        <div className="content-width home-v2-audience-grid">
+          <div className="home-v2-audience-card panel">
+            <p className="home-v2-section-label">Built for</p>
+            <h2>Teams that cannot afford surprise release impact</h2>
+            <ul className="home-v2-audience-list">
+              <li>Head of Engineering</li>
+              <li>Product and Product Marketing</li>
+              <li>Customer Success leadership</li>
+              <li>Support operations</li>
+            </ul>
           </div>
 
-          <div className="panel">
-            <h2>Architecture snapshot</h2>
-            <div className="code-block">
-              <pre>{`Jira / Manual Input
-        ↓
-Change Intelligence API
-        ↓
-Deterministic Parser + AI Layer
-        ↓
-Risk / Scopes / Impact Reasoning
-        ↓
-Docs, Dashboard, Slack, Email`}</pre>
-            </div>
-            <div className="actions">
-              <Link href="/docs/architecture" className="button-ghost">
-                View architecture
-              </Link>
-              <Link href="/login" className="button">
-                Go to login
-              </Link>
-            </div>
+          <div className="home-v2-audience-card panel">
+            <p className="home-v2-section-label">What you gain</p>
+            <ul className="home-v2-audience-list">
+              <li>Earlier visibility into breaking changes</li>
+              <li>Clear partner impact before rollout</li>
+              <li>Faster internal coordination</li>
+              <li>Less reactive support chaos</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-v2-close">
+        <div className="content-width home-v2-close-card panel">
+          <div>
+            <p className="home-v2-section-label">Start with the API</p>
+            <h2>See how Change Intelligence fits into your workflow</h2>
+            <p className="text-muted">
+              Explore the API, review the product flow, and decide whether your team
+              should move into pilot access.
+            </p>
+          </div>
+
+          <div className="home-v2-actions">
+            <Link href="/pricing" className="button home-v2-button-primary">
+              View pricing
+            </Link>
+
+            <Link href="/login" className="button-ghost home-v2-button-secondary">
+              Request access
+            </Link>
           </div>
         </div>
       </section>

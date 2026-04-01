@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import Image from 'next/image';
+
+
 
 const mainLinks = [
   { href: '/docs', label: 'Docs' },
@@ -9,10 +12,17 @@ export function Header() {
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        <Link href="/" className="brand brand-mark">
-          <span className="brand-dot" />
-          <span>Change Intelligence</span>
-        </Link>
+<Link href="/" className="site-brand" aria-label="Opsentry home">
+  <Image
+    src="/images/opsentry_icon_512.png"
+    alt="Opsentry"
+    width={36}
+    height={36}
+    priority
+    className="site-brand-icon"
+  />
+  <span className="site-brand-wordmark">opSentry</span>
+</Link>
 
         <nav className="nav" aria-label="Main navigation">
           {mainLinks.map((link) => (
