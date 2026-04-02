@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 import {
   apiEndpointSlugs,
   apiReferenceParentSlug,
@@ -10,8 +11,8 @@ import {
 const endpointDocs = docs.filter((doc) => apiEndpointSlugs.includes(doc.slug));
 const mainDocs = docs.filter((doc) => !apiEndpointSlugs.includes(doc.slug));
 
-function getHref(doc: DocItem) {
-  return doc.slug === defaultDocSlug ? '/docs' : `/docs/${doc.slug}`;
+function getHref(doc: DocItem): Route {
+  return (doc.slug === defaultDocSlug ? '/docs' : `/docs/${doc.slug}`) as Route;
 }
 
 export function DocsSidebar({ activeSlug }: { activeSlug?: string }) {

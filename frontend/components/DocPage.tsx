@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { DocItem } from '@/lib/docs';
 import { CodeTabs } from '@/components/CodeTabs';
+import type { Route } from 'next';
 
 function formatInline(text: string) {
   const parts = text.split(/(`[^`]+`)/g);
@@ -170,12 +171,12 @@ export function DocPage({ doc }: { doc: DocItem }) {
           dashboard, partner uploads, and alerts in later phases.
         </p>
         <div className="actions">
-          <Link href="/pricing" className="button">
-            View pricing
-          </Link>
-          <Link href="/login" className="button-ghost">
-            Log in
-          </Link>
+        <Link href={'/pricing' as Route} className="button">
+          View pricing
+        </Link>
+        <Link href={'/login' as Route} className="button-ghost">
+          Log in
+        </Link>
         </div>
       </div>
     </article>

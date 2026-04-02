@@ -1,11 +1,10 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import type { Route } from 'next';
 
-
-
-const mainLinks = [
+const mainLinks: Array<{ href: Route; label: string }> = [
   { href: '/docs', label: 'Docs' },
-  { href: '/pricing', label: 'Pricing' }
+  { href: '/pricing', label: 'Pricing' },
 ];
 
 export function Header() {
