@@ -1,9 +1,23 @@
 'use client';
 
-import { ChangeEvent, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  fetchPartners,
+  uploadPartnersJSON,
+} from '@/app/app/lib/partner-api';
+
+type PartnerMapRow = {
+  id: number;
+  partner_name: string;
+  scopes: string[];
+  area: string;
+  status: string;
+  extra: Record<string, unknown>;
+  created_at: string;
+};
 
 type AppRow = {
-  id: string;
+  id: number;
   name: string;
   description: string;
   status: 'Sandbox' | 'Production review';
@@ -11,6 +25,16 @@ type AppRow = {
   clientSecret: string;
   redirectUri: string;
   calls: string;
+};
+
+type AppApiRow = {
+  id: number;
+  name: string;
+  description?: string | null;
+  status: string;
+  client_id: string;
+  client_secret: string;
+  redirect_uri?: string | null;
 };
 
 type NotificationRow = {
@@ -24,43 +48,28 @@ type NotificationRow = {
   detailJson: string;
 };
 
-type PartnerMapRow = {
-  id: string;
-  partner: string;
-  scopes: string;
-  area: string;
-  status: string;
-  updated: string;
-  extra?: Record<string, string>;
+type AppDrafts = Record<number, { redirectUri: string; description: string; showSecret: boolean }>;
+
+type JsonPartnerInput = {
+  partner?: unknown;
+  partner_name?: unknown;
+  name?: unknown;
+  scopes?: unknown;
+  area?: unknown;
+  status?: unknown;
+  extra?: unknown;
 };
 
-type AppDrafts = Record<
-  string,
-  { redirectUri: string; description: string; showSecret: boolean }
->;
+type StoredUser = {
+  user_id: number;
+  email: string;
+  full_name: string;
+  workspace_id: number;
+  workspace_name: string;
+};
 
-const initialApps: AppRow[] = [
-  {
-    id: 'app-1',
-    name: 'Northstar API Workspace',
-    description: 'Primary sandbox app for release-impact testing and partner alert previews.',
-    status: 'Sandbox',
-    clientId: 'cli_sbx_84c2f1a9d0',
-    clientSecret: 'sec_sbx_29f8db8c1x19k',
-    redirectUri: '',
-    calls: '2,184',
-  },
-  {
-    id: 'app-2',
-    name: 'Payments Rollout Monitor',
-    description: 'Prepared for production review with scoped partner visibility and alert routing.',
-    status: 'Production review',
-    clientId: 'cli_prv_1bc8e2d7a4',
-    clientSecret: 'sec_prv_71a2df90pp42m',
-    redirectUri: 'https://example.com/callback',
-    calls: '412',
-  },
-];
+const API_BASE = 'http://127.0.0.1:8000';
+
 
 const notifications: NotificationRow[] = [
   {
@@ -72,13 +81,7 @@ const notifications: NotificationRow[] = [
     detailTitle: 'Breaking auth change flagged for production review',
     detailBody:
       'Legacy scope usage is still present in one configured app. This change should be reviewed before approval and partner owners should be notified ahead of rollout.',
-    detailJson: `{
-  "severity": "high",
-  "change_type": "breaking change",
-  "impacted_partners": ["Northstar Bank", "Orbit HR"],
-  "recommended_action": "Escalate to partner owners and support readiness",
-  "status": "pending_review"
-}`,
+    detailJson: `{"severity":"high","change_type":"breaking change","impacted_partners":["Northstar Bank","Orbit HR"],"recommended_action":"Escalate to partner owners and support readiness","status":"pending_review"}`,
   },
   {
     id: 'notif-2',
@@ -89,13 +92,7 @@ const notifications: NotificationRow[] = [
     detailTitle: 'OAuth scope migration may affect 3 partners',
     detailBody:
       'The current release includes scope migration activity that maps to multiple partner records and should be reviewed before wider exposure.',
-    detailJson: `{
-  "severity": "medium",
-  "change_type": "authentication",
-  "impacted_partners": ["Northstar Bank", "Orbit HR", "Helios Marketplace"],
-  "recommended_action": "Review migration guidance before rollout",
-  "status": "needs_guidance"
-}`,
+    detailJson: `{"severity":"medium","change_type":"authentication","impacted_partners":["Northstar Bank","Orbit HR","Helios Marketplace"],"recommended_action":"Review migration guidance before rollout","status":"needs_guidance"}`,
   },
   {
     id: 'notif-3',
@@ -106,53 +103,9 @@ const notifications: NotificationRow[] = [
     detailTitle: 'Sandbox activity remains within expected test volume',
     detailBody:
       'Usage is healthy and no unusual burst behavior is currently visible in the workspace.',
-    detailJson: `{
-  "severity": "low",
-  "change_type": "sandbox",
-  "impacted_partners": [],
-  "recommended_action": "No action required",
-  "status": "healthy"
-}`,
-  },
-  {
-    id: 'notif-4',
-    severity: 'medium',
-    summary: 'Partner map has stale records that should be refreshed',
-    partners: 'Acme Payroll',
-    action: 'Upload a new CSV or raw JSON payload.',
-    detailTitle: 'Partner map has stale records that should be refreshed',
-    detailBody:
-      'One or more partner mappings appear stale compared with recent change patterns. Refreshing the partner map is recommended.',
-    detailJson: `{
-  "severity": "medium",
-  "change_type": "partner_map",
-  "impacted_partners": ["Acme Payroll"],
-  "recommended_action": "Upload a new CSV or raw JSON payload",
-  "status": "refresh_recommended"
-}`,
-  },
-  {
-    id: 'notif-5',
-    severity: 'high',
-    summary: 'Client secret rotation recommended for one sandbox app',
-    partners: 'None',
-    action: 'Regenerate credentials before wider sharing.',
-    detailTitle: 'Client secret rotation recommended for one sandbox app',
-    detailBody:
-      'One sandbox app credential appears old enough that rotation is recommended before broader internal sharing.',
-    detailJson: `{
-  "severity": "high",
-  "change_type": "credential_hygiene",
-  "impacted_partners": [],
-  "recommended_action": "Regenerate credentials before wider sharing",
-  "status": "rotation_recommended"
-}`,
+    detailJson: `{"severity":"low","change_type":"sandbox","impacted_partners":[],"recommended_action":"No action required","status":"healthy"}`,
   },
 ];
-
-function generateId() {
-  return `app-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-}
 
 function generateClientId() {
   return `cli_sbx_${Math.random().toString(36).slice(2, 12)}`;
@@ -162,265 +115,257 @@ function generateClientSecret() {
   return `sec_sbx_${Math.random().toString(36).slice(2, 18)}`;
 }
 
-function normalizeCsvRowWrapper(line: string): string {
-  const trimmed = line.trim();
-
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    const inner = trimmed.slice(1, -1);
-    return inner.replace(/""/g, '"');
-  }
-
-  return trimmed;
+function normalizeStatus(status: string): 'Sandbox' | 'Production review' {
+  return status.toLowerCase() === 'sandbox' ? 'Sandbox' : 'Production review';
 }
 
-function parseCsvLine(line: string): string[] {
-  const normalized = normalizeCsvRowWrapper(line);
-  const cells: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < normalized.length; i += 1) {
-    const char = normalized[i];
-    const next = normalized[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      cells.push(current.trim());
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  cells.push(current.trim());
-
-  return cells.map((cell) => cell.replace(/^"(.*)"$/, '$1').trim());
-}
-
-function parseCsv(text: string): PartnerMapRow[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length < 2) return [];
-
-  const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
-
-  const aliasMap: Record<string, string[]> = {
-    partner: ['partner', 'partner_name', 'name', 'partnername', 'customer', 'client'],
-    scopes: ['scopes', 'scope', 'permissions', 'products', 'features'],
-    area: ['area', 'product_area', 'productarea', 'domain', 'group', 'category'],
-    status: ['status', 'state'],
+function mapApiAppToRow(app: AppApiRow): AppRow {
+  return {
+    id: app.id,
+    name: app.name,
+    description: app.description ?? '',
+    status: normalizeStatus(app.status),
+    clientId: app.client_id,
+    clientSecret: app.client_secret,
+    redirectUri: app.redirect_uri ?? '',
+    calls: '0',
   };
-
-  const findHeaderIndex = (aliases: string[]) =>
-    headers.findIndex((header) => aliases.includes(header));
-
-  return lines.slice(1).map((line, index) => {
-    const values = parseCsvLine(line);
-
-    const getValue = (aliases: string[]) => {
-      const idx = findHeaderIndex(aliases);
-      return idx >= 0 ? values[idx] ?? '' : '';
-    };
-
-    const partner = getValue(aliasMap.partner) || `Partner ${index + 1}`;
-    const scopes = getValue(aliasMap.scopes) || '—';
-    const area = getValue(aliasMap.area) || 'General';
-    const status = getValue(aliasMap.status) || 'Mapped';
-
-    const knownIndices = new Set(
-      Object.values(aliasMap)
-        .map((aliases) => findHeaderIndex(aliases))
-        .filter((idx) => idx >= 0)
-    );
-
-    const extra: Record<string, string> = {};
-    headers.forEach((header, idx) => {
-      if (!knownIndices.has(idx)) {
-        extra[header] = values[idx] ?? '';
-      }
-    });
-
-    return {
-      id: `csv-${index}-${partner}`,
-      partner,
-      scopes,
-      area,
-      status,
-      updated: 'Just now',
-      extra,
-    };
-  });
 }
 
-function normalizeJsonRows(value: unknown): PartnerMapRow[] {
-  if (!Array.isArray(value)) return [];
+function splitScopes(value: string[] | string | null | undefined): string[] {
+  if (!value) return [];
 
-  return value.map((item, index) => {
-    const row = typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : {};
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  }
 
-    const partner = String(row.partner ?? row.partner_name ?? row.name ?? `Partner ${index + 1}`);
-    const scopesValue = row.scopes ?? row.scope ?? row.permissions ?? '—';
-    const scopes = Array.isArray(scopesValue) ? scopesValue.join(', ') : String(scopesValue || '—');
-
-    return {
-      id: `json-${index}-${partner}`,
-      partner,
-      scopes,
-      area: String(row.area ?? row.product_area ?? 'General'),
-      status: String(row.status ?? 'Mapped'),
-      updated: 'Just now',
-      extra: {},
-    };
-  });
-}
-
-function splitScopes(scopes: string): string[] {
-  return scopes
+  return value
     .split(',')
-    .map((scope) => scope.trim())
-    .filter(Boolean)
-    .filter((scope) => scope !== '—');
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeJsonRows(rows: unknown): JsonPartnerInput[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      return row as JsonPartnerInput;
+    })
+    .filter((row): row is JsonPartnerInput => row !== null);
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
 }
 
 export default function AppHomePage() {
-  const [apps, setApps] = useState<AppRow[]>(initialApps);
-  const [expandedAppId, setExpandedAppId] = useState<string | null>(initialApps[0]?.id ?? null);
+  const [apps, setApps] = useState<AppRow[]>([]);
+  const [appsLoading, setAppsLoading] = useState(true);
+  const [appsError, setAppsError] = useState('');
+  const [expandedAppId, setExpandedAppId] = useState<number | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationRow | null>(null);
   const [jsonModalOpen, setJsonModalOpen] = useState(false);
   const [createAppModalOpen, setCreateAppModalOpen] = useState(false);
-  const [confirmRegenerateAppId, setConfirmRegenerateAppId] = useState<string | null>(null);
+  const [confirmRegenerateAppId, setConfirmRegenerateAppId] = useState<number | null>(null);
+  const [confirmDeleteAppId, setConfirmDeleteAppId] = useState<number | null>(null);
   const [jsonInput, setJsonInput] = useState('');
-  const [appSearchTerm, setAppSearchTerm] = useState('');
-  const [partnerSearchTerm, setPartnerSearchTerm] = useState('');
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filterSearchTerm, setFilterSearchTerm] = useState('');
   const [selectedScopeFilters, setSelectedScopeFilters] = useState<string[]>([]);
   const [selectedAreaFilters, setSelectedAreaFilters] = useState<string[]>([]);
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
+  const [partnerSearchTerm, setPartnerSearchTerm] = useState('');
+  const [filterSearchTerm, setFilterSearchTerm] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [newAppName, setNewAppName] = useState('');
   const [newAppRedirectUri, setNewAppRedirectUri] = useState('');
   const [newAppDescription, setNewAppDescription] = useState('');
   const [partnerRows, setPartnerRows] = useState<PartnerMapRow[]>([]);
-  const [appDrafts, setAppDrafts] = useState<AppDrafts>(
-    Object.fromEntries(
-      initialApps.map((app) => [
-        app.id,
-        {
-          redirectUri: app.redirectUri,
-          description: app.description,
-          showSecret: false,
-        },
-      ])
-    )
-  );
-
+  const [appDrafts, setAppDrafts] = useState<AppDrafts>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [saveNotice, setSaveNotice] = useState('');
+  const [workspaceId, setWorkspaceId] = useState<number | null>(null);
+  const saveNoticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const activeNotificationCount = notifications.length;
-  const highPriorityCount = notifications.filter((item) => item.severity === 'high').length;
-  const hasApps = apps.length > 0;
+  async function fetchApps() {
+    try {
+      setAppsError('');
+      setAppsLoading(true);
+
+      if (!workspaceId) return;
+        const res = await fetch(`${API_BASE}/apps/list/${workspaceId}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAppsError(data.detail || 'Unable to load apps.');
+        setApps([]);
+        return;
+      }
+
+      const nextApps: AppRow[] = ((data.apps ?? []) as AppApiRow[]).map(mapApiAppToRow);
+      setApps(nextApps);
+      setExpandedAppId((prev) => prev ?? nextApps[0]?.id ?? null);
+
+      setAppDrafts(
+        Object.fromEntries(
+          nextApps.map((app: AppRow) => [
+            app.id,
+            {
+              redirectUri: app.redirectUri,
+              description: app.description,
+              showSecret: false,
+            },
+          ])
+        ) as AppDrafts
+      );
+    } catch {
+      setAppsError('Unable to reach the server.');
+      setApps([]);
+    } finally {
+      setAppsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+  const raw = localStorage.getItem('opsentry_user');
+
+  if (!raw) return;
+
+  try {
+    const user = JSON.parse(raw) as StoredUser;
+    setWorkspaceId(user.workspace_id);
+  } catch {
+    localStorage.removeItem('opsentry_user');
+  }
+}, []);
+
+  async function loadPartners() {
+    try {
+      if (!workspaceId) return;
+        const res = await fetchPartners(workspaceId);
+      if (res.success) {
+        setPartnerRows((res.rows ?? []) as PartnerMapRow[]);
+      }
+    } catch {
+      setPartnerRows([]);
+    }
+  }
+
+  function showSaveNotice(message: string) {
+    setSaveNotice(message);
+
+    if (saveNoticeTimeoutRef.current) {
+      clearTimeout(saveNoticeTimeoutRef.current);
+    }
+
+    saveNoticeTimeoutRef.current = setTimeout(() => {
+      setSaveNotice('');
+    }, 2000);
+  }
+
+    useEffect(() => {
+    if (!workspaceId) return;
+
+    fetchApps();
+    loadPartners();
+    }, [workspaceId]);
+
+  useEffect(() => {
+    return () => {
+      if (saveNoticeTimeoutRef.current) {
+        clearTimeout(saveNoticeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const hasPartnerMap = partnerRows.length > 0;
 
-  const availableScopes = useMemo(() => {
-    return [...new Set(partnerRows.flatMap((row) => splitScopes(row.scopes)))].sort((a, b) =>
-      a.localeCompare(b)
-    );
-  }, [partnerRows]);
+  const availableScopes = useMemo(
+    () =>
+      [...new Set(partnerRows.flatMap((row) => splitScopes(row.scopes)))].sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [partnerRows]
+  );
 
-  const availableAreas = useMemo(() => {
-    return [...new Set(partnerRows.map((row) => row.area).filter(Boolean))].sort((a, b) =>
-      a.localeCompare(b)
-    );
-  }, [partnerRows]);
+  const availableAreas = useMemo(
+    () => [...new Set(partnerRows.map((row) => row.area).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [partnerRows]
+  );
 
-  const availableStatuses = useMemo(() => {
-    return [...new Set(partnerRows.map((row) => row.status).filter(Boolean))].sort((a, b) =>
-      a.localeCompare(b)
-    );
-  }, [partnerRows]);
+  const availableStatuses = useMemo(
+    () => [...new Set(partnerRows.map((row) => row.status).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [partnerRows]
+  );
 
-  const filteredScopeOptions = useMemo(() => {
-    const term = filterSearchTerm.trim().toLowerCase();
-    if (!term) return availableScopes;
-    return availableScopes.filter((scope) => scope.toLowerCase().includes(term));
-  }, [availableScopes, filterSearchTerm]);
+  const filteredScopeOptions = useMemo(
+    () =>
+      !filterSearchTerm.trim()
+        ? availableScopes
+        : availableScopes.filter((scope) => scope.toLowerCase().includes(filterSearchTerm.toLowerCase())),
+    [availableScopes, filterSearchTerm]
+  );
 
-  const filteredAreaOptions = useMemo(() => {
-    const term = filterSearchTerm.trim().toLowerCase();
-    if (!term) return availableAreas;
-    return availableAreas.filter((area) => area.toLowerCase().includes(term));
-  }, [availableAreas, filterSearchTerm]);
+  const filteredAreaOptions = useMemo(
+    () =>
+      !filterSearchTerm.trim()
+        ? availableAreas
+        : availableAreas.filter((area) => area.toLowerCase().includes(filterSearchTerm.toLowerCase())),
+    [availableAreas, filterSearchTerm]
+  );
 
-  const filteredStatusOptions = useMemo(() => {
-    const term = filterSearchTerm.trim().toLowerCase();
-    if (!term) return availableStatuses;
-    return availableStatuses.filter((status) => status.toLowerCase().includes(term));
-  }, [availableStatuses, filterSearchTerm]);
-
-  const filteredApps = useMemo(() => {
-    const term = appSearchTerm.trim().toLowerCase();
-    if (!term) return apps;
-    return apps.filter((app) => {
-      const redirect = appDrafts[app.id]?.redirectUri ?? '';
-      const description = appDrafts[app.id]?.description ?? app.description;
-      return (
-        app.name.toLowerCase().includes(term) ||
-        description.toLowerCase().includes(term) ||
-        redirect.toLowerCase().includes(term) ||
-        app.clientId.toLowerCase().includes(term)
-      );
-    });
-  }, [apps, appDrafts, appSearchTerm]);
+  const filteredStatusOptions = useMemo(
+    () =>
+      !filterSearchTerm.trim()
+        ? availableStatuses
+        : availableStatuses.filter((status) => status.toLowerCase().includes(filterSearchTerm.toLowerCase())),
+    [availableStatuses, filterSearchTerm]
+  );
 
   const filteredPartnerRows = useMemo(() => {
     const term = partnerSearchTerm.trim().toLowerCase();
 
     return partnerRows.filter((row) => {
       const extraValues = Object.values(row.extra ?? {}).join(' ').toLowerCase();
-
-      const matchesSearch =
-        !term ||
-        row.partner.toLowerCase().includes(term) ||
-        row.scopes.toLowerCase().includes(term) ||
-        row.area.toLowerCase().includes(term) ||
-        row.status.toLowerCase().includes(term) ||
-        extraValues.includes(term);
-
       const rowScopes = splitScopes(row.scopes);
+      const scopesText = rowScopes.join(', ').toLowerCase();
 
-      const matchesScope =
-        selectedScopeFilters.length === 0 ||
-        selectedScopeFilters.some((scope) => rowScopes.includes(scope));
-
-      const matchesArea =
-        selectedAreaFilters.length === 0 || selectedAreaFilters.includes(row.area);
-
-      const matchesStatus =
-        selectedStatusFilters.length === 0 || selectedStatusFilters.includes(row.status);
-
-      return matchesSearch && matchesScope && matchesArea && matchesStatus;
+      return (
+        (!term ||
+          row.partner_name.toLowerCase().includes(term) ||
+          scopesText.includes(term) ||
+          row.area.toLowerCase().includes(term) ||
+          row.status.toLowerCase().includes(term) ||
+          extraValues.includes(term)) &&
+        (selectedScopeFilters.length === 0 || selectedScopeFilters.some((scope) => rowScopes.includes(scope))) &&
+        (selectedAreaFilters.length === 0 || selectedAreaFilters.includes(row.area)) &&
+        (selectedStatusFilters.length === 0 || selectedStatusFilters.includes(row.status))
+      );
     });
   }, [partnerRows, partnerSearchTerm, selectedScopeFilters, selectedAreaFilters, selectedStatusFilters]);
 
   function toggleListValue(value: string, list: string[], setter: (next: string[]) => void) {
-    if (list.includes(value)) {
-      setter(list.filter((item) => item !== value));
-      return;
-    }
-    setter([...list, value]);
+    setter(list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
   }
 
   function clearFilters() {
@@ -430,7 +375,7 @@ export default function AppHomePage() {
     setFilterSearchTerm('');
   }
 
-  function handleRedirectChange(appId: string, value: string) {
+  function handleRedirectChange(appId: number, value: string) {
     setAppDrafts((prev) => ({
       ...prev,
       [appId]: {
@@ -440,7 +385,7 @@ export default function AppHomePage() {
     }));
   }
 
-  function handleDescriptionChange(appId: string, value: string) {
+  function handleDescriptionChange(appId: number, value: string) {
     setAppDrafts((prev) => ({
       ...prev,
       [appId]: {
@@ -450,7 +395,7 @@ export default function AppHomePage() {
     }));
   }
 
-  function toggleSecret(appId: string) {
+  function toggleSecret(appId: number) {
     setAppDrafts((prev) => ({
       ...prev,
       [appId]: {
@@ -460,18 +405,35 @@ export default function AppHomePage() {
     }));
   }
 
-  function deleteApp(appId: string) {
-    const nextApps = apps.filter((app) => app.id !== appId);
-    setApps(nextApps);
+  async function deleteApp(appId: number) {
+    try {
+      const res = await fetch(`${API_BASE}/apps/delete/${appId}`, {
+        method: 'DELETE',
+      });
 
-    setAppDrafts((prev) => {
-      const next = { ...prev };
-      delete next[appId];
-      return next;
-    });
+      const data = await res.json();
 
-    if (expandedAppId === appId) {
-      setExpandedAppId(nextApps[0]?.id ?? null);
+      if (!res.ok) {
+        alert(data.detail || 'Unable to delete app.');
+        return;
+      }
+
+      const nextApps = apps.filter((app) => app.id !== appId);
+      setApps(nextApps);
+
+      setAppDrafts((prev) => {
+        const next = { ...prev };
+        delete next[appId];
+        return next;
+      });
+
+      if (expandedAppId === appId) {
+        setExpandedAppId(nextApps[0]?.id ?? null);
+      }
+
+      setConfirmDeleteAppId(null);
+    } catch {
+      alert('Unable to reach the server.');
     }
   }
 
@@ -483,88 +445,159 @@ export default function AppHomePage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const text = await file.text();
-    const parsed = parseCsv(text);
-    setPartnerRows(parsed);
+    await file.text();
+    alert('CSV upload is not wired on the dashboard yet. Use Submit raw JSON for now.');
+
     setFilterOpen(false);
     event.target.value = '';
   }
 
-  function handleCreateApp() {
+  async function handleCreateApp() {
     const trimmedName = newAppName.trim();
     if (!trimmedName) return;
+    if (!workspaceId) {
+        alert('No workspace found for current session.');
+        return;
+        }
 
-    const newId = generateId();
-    const createdApp: AppRow = {
-      id: newId,
-      name: trimmedName,
-      description: newAppDescription.trim() || 'New sandbox app ready for configuration.',
-      status: 'Sandbox',
-      clientId: generateClientId(),
-      clientSecret: generateClientSecret(),
-      redirectUri: newAppRedirectUri.trim(),
-      calls: '0',
-    };
+    try {
+      const res = await fetch(`${API_BASE}/apps/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          name: trimmedName,
+          description: newAppDescription.trim(),
+          redirect_uri: newAppRedirectUri.trim(),
+        }),
+      });
 
-    setApps((prev) => [createdApp, ...prev]);
-    setAppDrafts((prev) => ({
-      ...prev,
-      [newId]: {
-        redirectUri: createdApp.redirectUri,
-        description: createdApp.description,
-        showSecret: false,
-      },
-    }));
-    setExpandedAppId(newId);
-    setCreateAppModalOpen(false);
-    setNewAppName('');
-    setNewAppRedirectUri('');
-    setNewAppDescription('');
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.detail || 'Unable to create app.');
+        return;
+      }
+
+      const createdApp = mapApiAppToRow(data.app);
+      setApps((prev) => [createdApp, ...prev]);
+      setAppDrafts((prev) => ({
+        ...prev,
+        [createdApp.id]: {
+          redirectUri: createdApp.redirectUri,
+          description: createdApp.description,
+          showSecret: false,
+        },
+      }));
+      setExpandedAppId(createdApp.id);
+      setCreateAppModalOpen(false);
+      setNewAppName('');
+      setNewAppRedirectUri('');
+      setNewAppDescription('');
+    } catch {
+      alert('Unable to reach the server.');
+    }
   }
 
-  function handleSubmitJson() {
+  async function handleSubmitJson() {
     try {
       const parsed = JSON.parse(jsonInput) as unknown;
       const rows = Array.isArray(parsed)
         ? normalizeJsonRows(parsed)
         : normalizeJsonRows((parsed as { partners?: unknown })?.partners ?? []);
-      setPartnerRows(rows);
+
+      if (!workspaceId) {
+        alert('No workspace found for current session.');
+        return;
+        }
+
+const response = await uploadPartnersJSON(workspaceId, rows);
+
+      if (!response.success) {
+        alert(response.detail || 'Unable to upload partner JSON.');
+        return;
+      }
+
+      await loadPartners();
       setJsonModalOpen(false);
       setJsonInput('');
       setFilterOpen(false);
-    } catch (error) {
-      console.error('Invalid JSON', error);
+    } catch {
       alert('Invalid JSON format. Please check your payload and try again.');
     }
   }
 
-  function handleSaveApp(appId: string) {
-    setApps((prev) =>
-      prev.map((app) => {
-        if (app.id !== appId) return app;
-        const draft = appDrafts[appId];
-        if (!draft) return app;
-        return {
-          ...app,
-          redirectUri: draft.redirectUri,
+  async function handleSaveApp(appId: number) {
+    const draft = appDrafts[appId];
+    const existing = apps.find((app) => app.id === appId);
+    if (!draft || !existing) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/apps/update/${appId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: existing.name,
           description: draft.description,
-        };
-      })
-    );
+          redirect_uri: draft.redirectUri,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.detail || 'Unable to save app.');
+        return;
+      }
+
+      const updated = data.app;
+
+      setApps((prev) =>
+        prev.map((app) =>
+          app.id !== appId
+            ? app
+            : {
+                ...app,
+                name: updated.name,
+                description: updated.description ?? '',
+                status: normalizeStatus(updated.status),
+                clientId: updated.client_id,
+                clientSecret: updated.client_secret,
+                redirectUri: updated.redirect_uri ?? '',
+              }
+        )
+      );
+
+      setAppDrafts((prev) => ({
+        ...prev,
+        [appId]: {
+          redirectUri: updated.redirect_uri ?? '',
+          description: updated.description ?? '',
+          showSecret: prev[appId]?.showSecret ?? false,
+        },
+      }));
+
+      showSaveNotice('App saved');
+    } catch {
+      alert('Unable to reach the server.');
+    }
   }
 
-  function handleRegenerateCredentials(appId: string) {
+  function handleRegenerateCredentials(appId: number) {
+    const target = apps.find((app) => app.id === appId);
+    if (!target) {
+      setConfirmRegenerateAppId(null);
+      return;
+    }
+
     setApps((prev) =>
       prev.map((app) =>
         app.id === appId
-          ? {
-              ...app,
-              clientId: generateClientId(),
-              clientSecret: generateClientSecret(),
-            }
+          ? { ...app, clientId: generateClientId(), clientSecret: generateClientSecret() }
           : app
       )
     );
+
     setAppDrafts((prev) => ({
       ...prev,
       [appId]: {
@@ -572,11 +605,19 @@ export default function AppHomePage() {
         showSecret: false,
       },
     }));
+
     setConfirmRegenerateAppId(null);
+    alert('Credential regeneration is UI-only right now. Backend endpoint not wired yet.');
   }
 
   return (
     <div className="app-dashboard">
+      {saveNotice ? (
+        <div className="app-save-notice" role="status" aria-live="polite">
+          {saveNotice}
+        </div>
+      ) : null}
+
       <section className="app-command-bar">
         <div className="app-command-left">
           <div className="app-command-signal-row">
@@ -586,7 +627,7 @@ export default function AppHomePage() {
             </div>
 
             <div className="app-command-signal">
-              <span className={`app-signal-dot ${hasApps ? 'green' : 'red'}`} />
+              <span className={`app-signal-dot ${apps.length > 0 ? 'green' : 'red'}`} />
               <span>{apps.length} apps created</span>
             </div>
 
@@ -597,10 +638,10 @@ export default function AppHomePage() {
           </div>
 
           <div className="app-command-summary">
-            <strong>{activeNotificationCount} active notifications</strong>
+            <strong>{notifications.length} active notifications</strong>
             <span>
-              {highPriorityCount > 0
-                ? `${highPriorityCount} high-priority items need review`
+              {notifications.filter((item) => item.severity === 'high').length > 0
+                ? `${notifications.filter((item) => item.severity === 'high').length} high-priority items need review`
                 : 'No high-priority items'}
             </span>
           </div>
@@ -652,8 +693,18 @@ export default function AppHomePage() {
           </div>
         </div>
 
+        {appsError ? <p className="login-v2-feedback login-v2-feedback-error">{appsError}</p> : null}
+        {appsLoading ? <p className="small">Loading apps...</p> : null}
+
+        {!appsLoading && apps.length === 0 ? (
+          <div className="app-empty-state compact">
+            <strong>No apps yet</strong>
+            <p>Create your first app to start managing credentials and sandbox workflows.</p>
+          </div>
+        ) : null}
+
         <div className="app-row-stack">
-          {filteredApps.map((app) => {
+          {apps.map((app) => {
             const expanded = expandedAppId === app.id;
             const draft = appDrafts[app.id] ?? {
               redirectUri: app.redirectUri,
@@ -742,6 +793,7 @@ export default function AppHomePage() {
                       >
                         Regenerate credentials
                       </button>
+
                       <button
                         type="button"
                         className="button home-v2-button-primary"
@@ -749,14 +801,15 @@ export default function AppHomePage() {
                       >
                         Save
                       </button>
+
                       <button
                         type="button"
                         className="app-icon-button danger"
-                        onClick={() => deleteApp(app.id)}
+                        onClick={() => setConfirmDeleteAppId(app.id)}
                         aria-label={`Delete ${app.name}`}
                         title="Delete app"
                       >
-                        🗑
+                        <TrashIcon />
                       </button>
                     </div>
                   </div>
@@ -778,7 +831,11 @@ export default function AppHomePage() {
           <div className="app-upload-card">
             <h4>Upload CSV</h4>
             <p>Choose a raw CSV file to populate your partner map and begin impact detection.</p>
-            <button type="button" className="button home-v2-button-primary" onClick={openCsvPicker}>
+            <button
+              type="button"
+              className="button home-v2-button-primary"
+              onClick={openCsvPicker}
+            >
               Upload CSV
             </button>
             <input
@@ -793,7 +850,11 @@ export default function AppHomePage() {
           <div className="app-upload-card">
             <h4>Submit raw JSON</h4>
             <p>Open a JSON input box and paste partner mapping payloads directly into the workspace.</p>
-            <button type="button" className="app-ghost-action" onClick={() => setJsonModalOpen(true)}>
+            <button
+              type="button"
+              className="app-ghost-action"
+              onClick={() => setJsonModalOpen(true)}
+            >
               Submit raw JSON
             </button>
           </div>
@@ -837,66 +898,54 @@ export default function AppHomePage() {
                   <div className="app-filter-section">
                     <strong>Scopes</strong>
                     <div className="app-filter-options">
-                      {filteredScopeOptions.length > 0 ? (
-                        filteredScopeOptions.map((scope) => (
-                          <label key={scope} className="app-filter-option">
-                            <input
-                              type="checkbox"
-                              checked={selectedScopeFilters.includes(scope)}
-                              onChange={() =>
-                                toggleListValue(scope, selectedScopeFilters, setSelectedScopeFilters)
-                              }
-                            />
-                            <span>{scope}</span>
-                          </label>
-                        ))
-                      ) : (
-                        <span className="app-filter-empty">No scopes found</span>
-                      )}
+                      {filteredScopeOptions.map((scope) => (
+                        <label key={scope} className="app-filter-option">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopeFilters.includes(scope)}
+                            onChange={() =>
+                              toggleListValue(scope, selectedScopeFilters, setSelectedScopeFilters)
+                            }
+                          />
+                          <span>{scope}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
 
                   <div className="app-filter-section">
                     <strong>Areas</strong>
                     <div className="app-filter-options">
-                      {filteredAreaOptions.length > 0 ? (
-                        filteredAreaOptions.map((area) => (
-                          <label key={area} className="app-filter-option">
-                            <input
-                              type="checkbox"
-                              checked={selectedAreaFilters.includes(area)}
-                              onChange={() =>
-                                toggleListValue(area, selectedAreaFilters, setSelectedAreaFilters)
-                              }
-                            />
-                            <span>{area}</span>
-                          </label>
-                        ))
-                      ) : (
-                        <span className="app-filter-empty">No areas found</span>
-                      )}
+                      {filteredAreaOptions.map((area) => (
+                        <label key={area} className="app-filter-option">
+                          <input
+                            type="checkbox"
+                            checked={selectedAreaFilters.includes(area)}
+                            onChange={() =>
+                              toggleListValue(area, selectedAreaFilters, setSelectedAreaFilters)
+                            }
+                          />
+                          <span>{area}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
 
                   <div className="app-filter-section">
                     <strong>Status</strong>
                     <div className="app-filter-options">
-                      {filteredStatusOptions.length > 0 ? (
-                        filteredStatusOptions.map((status) => (
-                          <label key={status} className="app-filter-option">
-                            <input
-                              type="checkbox"
-                              checked={selectedStatusFilters.includes(status)}
-                              onChange={() =>
-                                toggleListValue(status, selectedStatusFilters, setSelectedStatusFilters)
-                              }
-                            />
-                            <span>{status}</span>
-                          </label>
-                        ))
-                      ) : (
-                        <span className="app-filter-empty">No statuses found</span>
-                      )}
+                      {filteredStatusOptions.map((status) => (
+                        <label key={status} className="app-filter-option">
+                          <input
+                            type="checkbox"
+                            checked={selectedStatusFilters.includes(status)}
+                            onChange={() =>
+                              toggleListValue(status, selectedStatusFilters, setSelectedStatusFilters)
+                            }
+                          />
+                          <span>{status}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -919,8 +968,8 @@ export default function AppHomePage() {
                 <tbody>
                   {filteredPartnerRows.map((row) => (
                     <tr key={row.id}>
-                      <td>{row.partner}</td>
-                      <td>{row.scopes}</td>
+                      <td>{row.partner_name}</td>
+                      <td>{row.scopes.join(', ')}</td>
                       <td>{row.area}</td>
                       <td>
                         <span
@@ -933,7 +982,7 @@ export default function AppHomePage() {
                           {row.status}
                         </span>
                       </td>
-                      <td>{row.updated}</td>
+                      <td>{new Date(row.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -942,9 +991,7 @@ export default function AppHomePage() {
           ) : (
             <div className="app-empty-state">
               <strong>Populate with partner map</strong>
-              <p>
-                Upload a CSV or submit raw JSON to create your searchable partner mapping table.
-              </p>
+              <p>Upload a CSV or submit raw JSON to create your searchable partner mapping table.</p>
             </div>
           )}
         </div>
@@ -958,7 +1005,6 @@ export default function AppHomePage() {
                 <p className="app-section-kicker">Notification detail</p>
                 <h3 className="app-modal-title">{selectedNotification.detailTitle}</h3>
               </div>
-
               <button
                 type="button"
                 className="app-icon-button"
@@ -974,11 +1020,7 @@ export default function AppHomePage() {
             <div className="app-modal-meta">
               <span
                 className={`app-status-badge ${
-                  selectedNotification.severity === 'high'
-                    ? 'review'
-                    : selectedNotification.severity === 'medium'
-                      ? 'review'
-                      : 'sandbox'
+                  selectedNotification.severity === 'low' ? 'sandbox' : 'review'
                 }`}
               >
                 {selectedNotification.severity.toUpperCase()}
@@ -1001,7 +1043,6 @@ export default function AppHomePage() {
                 <p className="app-section-kicker">Raw JSON input</p>
                 <h3 className="app-modal-title">Submit partner mapping JSON</h3>
               </div>
-
               <button
                 type="button"
                 className="app-icon-button"
@@ -1016,7 +1057,7 @@ export default function AppHomePage() {
               className="input app-json-textarea"
               value={jsonInput}
               onChange={(e) => setJsonInput(e.target.value)}
-              placeholder={`{\n  "partners": [\n    {\n      "partner": "Northstar Bank",\n      "scopes": ["auth:legacy"],\n      "area": "Auth",\n      "status": "Mapped"\n    }\n  ]\n}`}
+              placeholder={`{\n  "partners": [\n    {\n      "partner_name": "Northstar Bank",\n      "scopes": ["auth:legacy"],\n      "area": "Auth",\n      "status": "Mapped"\n    }\n  ]\n}`}
             />
 
             <div className="app-card-actions app-card-actions-refined">
@@ -1027,7 +1068,11 @@ export default function AppHomePage() {
               >
                 Cancel
               </button>
-              <button type="button" className="button home-v2-button-primary" onClick={handleSubmitJson}>
+              <button
+                type="button"
+                className="button home-v2-button-primary"
+                onClick={handleSubmitJson}
+              >
                 Submit JSON
               </button>
             </div>
@@ -1043,7 +1088,6 @@ export default function AppHomePage() {
                 <p className="app-section-kicker">Create app</p>
                 <h3 className="app-modal-title">Add a new workspace app</h3>
               </div>
-
               <button
                 type="button"
                 className="app-icon-button"
@@ -1117,7 +1161,6 @@ export default function AppHomePage() {
                 <p className="app-section-kicker">Regenerate credentials</p>
                 <h3 className="app-modal-title">Are you sure you want to regenerate credentials?</h3>
               </div>
-
               <button
                 type="button"
                 className="app-icon-button"
@@ -1146,6 +1189,48 @@ export default function AppHomePage() {
                 onClick={() => handleRegenerateCredentials(confirmRegenerateAppId)}
               >
                 Yes, regenerate
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirmDeleteAppId ? (
+        <div className="app-modal-overlay" onClick={() => setConfirmDeleteAppId(null)}>
+          <div className="app-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="app-modal-header">
+              <div>
+                <p className="app-section-kicker">Delete app</p>
+                <h3 className="app-modal-title">Delete this app?</h3>
+              </div>
+              <button
+                type="button"
+                className="app-icon-button"
+                onClick={() => setConfirmDeleteAppId(null)}
+                aria-label="Close delete app modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="app-modal-copy">
+              This will remove the app from the current workspace view. This action cannot be undone in the UI.
+            </p>
+
+            <div className="app-card-actions app-card-actions-refined">
+              <button
+                type="button"
+                className="app-ghost-action"
+                onClick={() => setConfirmDeleteAppId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => confirmDeleteAppId && deleteApp(confirmDeleteAppId)}
+              >
+                Yes, delete app
               </button>
             </div>
           </div>
