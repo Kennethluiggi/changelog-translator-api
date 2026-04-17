@@ -3,18 +3,10 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchPartners,
+  uploadPartnersCSV,
   uploadPartnersJSON,
+  type PartnerRow,
 } from '@/app/app/lib/partner-api';
-
-type PartnerMapRow = {
-  id: number;
-  partner_name: string;
-  scopes: string[];
-  area: string;
-  status: string;
-  extra: Record<string, unknown>;
-  created_at: string;
-};
 
 type AppRow = {
   id: number;
@@ -48,7 +40,14 @@ type NotificationRow = {
   detailJson: string;
 };
 
-type AppDrafts = Record<number, { redirectUri: string; description: string; showSecret: boolean }>;
+type AppDrafts = Record<
+  number,
+  {
+    redirectUri: string;
+    description: string;
+    showSecret: boolean;
+  }
+>;
 
 type JsonPartnerInput = {
   partner?: unknown;
@@ -68,8 +67,13 @@ type StoredUser = {
   workspace_name: string;
 };
 
-const API_BASE = 'http://127.0.0.1:8000';
+type ImpactModalState = {
+  partnerName: string;
+  status: string;
+  reason: string;
+} | null;
 
+const API_BASE = 'http://127.0.0.1:8000';
 
 const notifications: NotificationRow[] = [
   {
@@ -158,6 +162,14 @@ function normalizeJsonRows(rows: unknown): JsonPartnerInput[] {
     .filter((row): row is JsonPartnerInput => row !== null);
 }
 
+function normalizeImpactStatus(status: string | undefined): 'none' | 'low' | 'medium' | 'high' {
+  const value = (status ?? '').toLowerCase();
+  if (value === 'high') return 'high';
+  if (value === 'medium') return 'medium';
+  if (value === 'low') return 'low';
+  return 'none';
+}
+
 function TrashIcon() {
   return (
     <svg
@@ -186,21 +198,21 @@ export default function AppHomePage() {
   const [appsError, setAppsError] = useState('');
   const [expandedAppId, setExpandedAppId] = useState<number | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationRow | null>(null);
+  const [selectedPartnerImpact, setSelectedPartnerImpact] = useState<ImpactModalState>(null);
   const [jsonModalOpen, setJsonModalOpen] = useState(false);
   const [createAppModalOpen, setCreateAppModalOpen] = useState(false);
   const [confirmRegenerateAppId, setConfirmRegenerateAppId] = useState<number | null>(null);
   const [confirmDeleteAppId, setConfirmDeleteAppId] = useState<number | null>(null);
   const [jsonInput, setJsonInput] = useState('');
-  const [selectedScopeFilters, setSelectedScopeFilters] = useState<string[]>([]);
-  const [selectedAreaFilters, setSelectedAreaFilters] = useState<string[]>([]);
-  const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
   const [partnerSearchTerm, setPartnerSearchTerm] = useState('');
-  const [filterSearchTerm, setFilterSearchTerm] = useState('');
-  const [filterOpen, setFilterOpen] = useState(false);
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+  const [columnPickerSearch, setColumnPickerSearch] = useState('');
   const [newAppName, setNewAppName] = useState('');
   const [newAppRedirectUri, setNewAppRedirectUri] = useState('');
   const [newAppDescription, setNewAppDescription] = useState('');
-  const [partnerRows, setPartnerRows] = useState<PartnerMapRow[]>([]);
+  const [partnerRows, setPartnerRows] = useState<PartnerRow[]>([]);
+  const [partnerColumns, setPartnerColumns] = useState<string[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
   const [appDrafts, setAppDrafts] = useState<AppDrafts>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [saveNotice, setSaveNotice] = useState('');
@@ -212,8 +224,12 @@ export default function AppHomePage() {
       setAppsError('');
       setAppsLoading(true);
 
-      if (!workspaceId) return;
-        const res = await fetch(`${API_BASE}/apps/list/${workspaceId}`);
+      if (!workspaceId) {
+        setApps([]);
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/apps/list/${workspaceId}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -223,6 +239,7 @@ export default function AppHomePage() {
       }
 
       const nextApps: AppRow[] = ((data.apps ?? []) as AppApiRow[]).map(mapApiAppToRow);
+
       setApps(nextApps);
       setExpandedAppId((prev) => prev ?? nextApps[0]?.id ?? null);
 
@@ -247,27 +264,46 @@ export default function AppHomePage() {
   }
 
   useEffect(() => {
-  const raw = localStorage.getItem('opsentry_user');
+    const raw = localStorage.getItem('opsentry_user');
 
-  if (!raw) return;
+    if (!raw) return;
 
-  try {
-    const user = JSON.parse(raw) as StoredUser;
-    setWorkspaceId(user.workspace_id);
-  } catch {
-    localStorage.removeItem('opsentry_user');
-  }
-}, []);
+    try {
+      const user = JSON.parse(raw) as StoredUser;
+      setWorkspaceId(user.workspace_id);
+    } catch {
+      localStorage.removeItem('opsentry_user');
+    }
+  }, []);
 
   async function loadPartners() {
     try {
-      if (!workspaceId) return;
-        const res = await fetchPartners(workspaceId);
-      if (res.success) {
-        setPartnerRows((res.rows ?? []) as PartnerMapRow[]);
+      if (!workspaceId) {
+        setPartnerRows([]);
+        setPartnerColumns([]);
+        setVisibleColumns([]);
+        return;
       }
+
+      const response = await fetchPartners(workspaceId);
+
+      if (!response.success) {
+        setPartnerRows([]);
+        setPartnerColumns([]);
+        setVisibleColumns([]);
+        return;
+      }
+
+      const nextRows = response.rows ?? [];
+      const nextColumns = Array.isArray(response.columns) ? response.columns : [];
+
+      setPartnerRows(nextRows);
+      setPartnerColumns(nextColumns);
+      setVisibleColumns(nextColumns);
     } catch {
       setPartnerRows([]);
+      setPartnerColumns([]);
+      setVisibleColumns([]);
     }
   }
 
@@ -283,12 +319,12 @@ export default function AppHomePage() {
     }, 2000);
   }
 
-    useEffect(() => {
+  useEffect(() => {
     if (!workspaceId) return;
 
     fetchApps();
     loadPartners();
-    }, [workspaceId]);
+  }, [workspaceId]);
 
   useEffect(() => {
     return () => {
@@ -300,79 +336,42 @@ export default function AppHomePage() {
 
   const hasPartnerMap = partnerRows.length > 0;
 
-  const availableScopes = useMemo(
-    () =>
-      [...new Set(partnerRows.flatMap((row) => splitScopes(row.scopes)))].sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [partnerRows]
-  );
-
-  const availableAreas = useMemo(
-    () => [...new Set(partnerRows.map((row) => row.area).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [partnerRows]
-  );
-
-  const availableStatuses = useMemo(
-    () => [...new Set(partnerRows.map((row) => row.status).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [partnerRows]
-  );
-
-  const filteredScopeOptions = useMemo(
-    () =>
-      !filterSearchTerm.trim()
-        ? availableScopes
-        : availableScopes.filter((scope) => scope.toLowerCase().includes(filterSearchTerm.toLowerCase())),
-    [availableScopes, filterSearchTerm]
-  );
-
-  const filteredAreaOptions = useMemo(
-    () =>
-      !filterSearchTerm.trim()
-        ? availableAreas
-        : availableAreas.filter((area) => area.toLowerCase().includes(filterSearchTerm.toLowerCase())),
-    [availableAreas, filterSearchTerm]
-  );
-
-  const filteredStatusOptions = useMemo(
-    () =>
-      !filterSearchTerm.trim()
-        ? availableStatuses
-        : availableStatuses.filter((status) => status.toLowerCase().includes(filterSearchTerm.toLowerCase())),
-    [availableStatuses, filterSearchTerm]
-  );
-
   const filteredPartnerRows = useMemo(() => {
     const term = partnerSearchTerm.trim().toLowerCase();
+    if (!term) return partnerRows;
 
     return partnerRows.filter((row) => {
-      const extraValues = Object.values(row.extra ?? {}).join(' ').toLowerCase();
-      const rowScopes = splitScopes(row.scopes);
-      const scopesText = rowScopes.join(', ').toLowerCase();
+      const haystack = [
+        row.partner_name,
+        row.area,
+        row.status,
+        ...(row.scopes ?? []),
+        ...Object.values(row.row_data ?? {}).map((value) => String(value)),
+      ]
+        .join(' ')
+        .toLowerCase();
 
-      return (
-        (!term ||
-          row.partner_name.toLowerCase().includes(term) ||
-          scopesText.includes(term) ||
-          row.area.toLowerCase().includes(term) ||
-          row.status.toLowerCase().includes(term) ||
-          extraValues.includes(term)) &&
-        (selectedScopeFilters.length === 0 || selectedScopeFilters.some((scope) => rowScopes.includes(scope))) &&
-        (selectedAreaFilters.length === 0 || selectedAreaFilters.includes(row.area)) &&
-        (selectedStatusFilters.length === 0 || selectedStatusFilters.includes(row.status))
-      );
+      return haystack.includes(term);
     });
-  }, [partnerRows, partnerSearchTerm, selectedScopeFilters, selectedAreaFilters, selectedStatusFilters]);
+  }, [partnerRows, partnerSearchTerm]);
 
-  function toggleListValue(value: string, list: string[], setter: (next: string[]) => void) {
-    setter(list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
+  const filteredColumnOptions = useMemo(() => {
+    const term = columnPickerSearch.trim().toLowerCase();
+    if (!term) return partnerColumns;
+
+    return partnerColumns.filter((column) => column.toLowerCase().includes(term));
+  }, [partnerColumns, columnPickerSearch]);
+
+  function toggleVisibleColumn(column: string) {
+    setVisibleColumns((prev) =>
+      prev.includes(column)
+        ? prev.filter((item) => item !== column)
+        : partnerColumns.filter((item) => item === column || prev.includes(item))
+    );
   }
 
-  function clearFilters() {
-    setSelectedScopeFilters([]);
-    setSelectedAreaFilters([]);
-    setSelectedStatusFilters([]);
-    setFilterSearchTerm('');
+  function showAllColumns() {
+    setVisibleColumns(partnerColumns);
   }
 
   function handleRedirectChange(appId: number, value: string) {
@@ -445,20 +444,37 @@ export default function AppHomePage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    await file.text();
-    alert('CSV upload is not wired on the dashboard yet. Use Submit raw JSON for now.');
+    try {
+      const csvText = await file.text();
 
-    setFilterOpen(false);
-    event.target.value = '';
+      if (!workspaceId) {
+        alert('No workspace found for current session.');
+        return;
+      }
+
+      const response = await uploadPartnersCSV(workspaceId, csvText);
+
+      if (!response.success) {
+        alert('Unable to upload CSV.');
+        return;
+      }
+
+      await loadPartners();
+      setColumnPickerOpen(false);
+      event.target.value = '';
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Unable to upload CSV.');
+    }
   }
 
   async function handleCreateApp() {
     const trimmedName = newAppName.trim();
     if (!trimmedName) return;
+
     if (!workspaceId) {
-        alert('No workspace found for current session.');
-        return;
-        }
+      alert('No workspace found for current session.');
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/apps/create`, {
@@ -509,21 +525,28 @@ export default function AppHomePage() {
       if (!workspaceId) {
         alert('No workspace found for current session.');
         return;
-        }
+      }
 
-const response = await uploadPartnersJSON(workspaceId, rows);
+      const response = await uploadPartnersJSON(workspaceId, rows);
 
       if (!response.success) {
-        alert(response.detail || 'Unable to upload partner JSON.');
+        alert('Unable to upload partner JSON.');
         return;
       }
 
       await loadPartners();
       setJsonModalOpen(false);
       setJsonInput('');
-      setFilterOpen(false);
-    } catch {
-      alert('Invalid JSON format. Please check your payload and try again.');
+      setColumnPickerOpen(false);
+    } catch (error) {
+      const message =
+        error instanceof SyntaxError
+          ? 'Invalid JSON format. Please check your payload and try again.'
+          : error instanceof Error
+          ? error.message
+          : 'Unable to upload partner JSON.';
+
+      alert(message);
     }
   }
 
@@ -608,6 +631,18 @@ const response = await uploadPartnersJSON(workspaceId, rows);
 
     setConfirmRegenerateAppId(null);
     alert('Credential regeneration is UI-only right now. Backend endpoint not wired yet.');
+  }
+
+  function openImpactDetails(row: PartnerRow) {
+    const status = normalizeImpactStatus(row.impact_status);
+    const label =
+      status === 'high' ? 'High' : status === 'medium' ? 'Medium' : status === 'low' ? 'Low' : 'Healthy';
+
+    setSelectedPartnerImpact({
+      partnerName: row.partner_name || 'Unknown partner',
+      status: label,
+      reason: row.impact_reason || 'No active impact detected for this partner row.',
+    });
   }
 
   return (
@@ -820,7 +855,7 @@ const response = await uploadPartnersJSON(workspaceId, rows);
         </div>
       </section>
 
-      <section className="app-section">
+      <section className="app-section app-partner-workspace-section">
         <div className="app-section-header compact">
           <div>
             <p className="app-section-kicker">Map partners</p>
@@ -860,7 +895,7 @@ const response = await uploadPartnersJSON(workspaceId, rows);
           </div>
         </div>
 
-        <div className="app-table-shell">
+        <div className="app-table-shell app-table-shell-fixed">
           <div className="app-table-toolbar">
             <input
               type="text"
@@ -874,76 +909,38 @@ const response = await uploadPartnersJSON(workspaceId, rows);
               <button
                 type="button"
                 className="app-ghost-action app-filter-chip"
-                onClick={() => setFilterOpen((prev) => !prev)}
+                onClick={() => setColumnPickerOpen((prev) => !prev)}
               >
-                Filter
+                Columns
               </button>
 
-              {filterOpen ? (
+              {columnPickerOpen ? (
                 <div className="app-filter-dropdown">
                   <input
                     type="text"
                     className="input app-filter-search"
-                    placeholder="Search filters"
-                    value={filterSearchTerm}
-                    onChange={(e) => setFilterSearchTerm(e.target.value)}
+                    placeholder="Search column headers"
+                    value={columnPickerSearch}
+                    onChange={(e) => setColumnPickerSearch(e.target.value)}
                   />
 
                   <div className="app-filter-actions">
-                    <button type="button" className="app-inline-link" onClick={clearFilters}>
-                      Clear all
+                    <button type="button" className="app-inline-link" onClick={showAllColumns}>
+                      Show all
                     </button>
                   </div>
 
                   <div className="app-filter-section">
-                    <strong>Scopes</strong>
+                    <strong>Spreadsheet columns</strong>
                     <div className="app-filter-options">
-                      {filteredScopeOptions.map((scope) => (
-                        <label key={scope} className="app-filter-option">
+                      {filteredColumnOptions.map((column) => (
+                        <label key={column} className="app-filter-option">
                           <input
                             type="checkbox"
-                            checked={selectedScopeFilters.includes(scope)}
-                            onChange={() =>
-                              toggleListValue(scope, selectedScopeFilters, setSelectedScopeFilters)
-                            }
+                            checked={visibleColumns.includes(column)}
+                            onChange={() => toggleVisibleColumn(column)}
                           />
-                          <span>{scope}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="app-filter-section">
-                    <strong>Areas</strong>
-                    <div className="app-filter-options">
-                      {filteredAreaOptions.map((area) => (
-                        <label key={area} className="app-filter-option">
-                          <input
-                            type="checkbox"
-                            checked={selectedAreaFilters.includes(area)}
-                            onChange={() =>
-                              toggleListValue(area, selectedAreaFilters, setSelectedAreaFilters)
-                            }
-                          />
-                          <span>{area}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="app-filter-section">
-                    <strong>Status</strong>
-                    <div className="app-filter-options">
-                      {filteredStatusOptions.map((status) => (
-                        <label key={status} className="app-filter-option">
-                          <input
-                            type="checkbox"
-                            checked={selectedStatusFilters.includes(status)}
-                            onChange={() =>
-                              toggleListValue(status, selectedStatusFilters, setSelectedStatusFilters)
-                            }
-                          />
-                          <span>{status}</span>
+                          <span>{column}</span>
                         </label>
                       ))}
                     </div>
@@ -954,37 +951,53 @@ const response = await uploadPartnersJSON(workspaceId, rows);
           </div>
 
           {hasPartnerMap ? (
-            <div className="app-table-wrap">
-              <table className="app-table">
+            <div className="app-table-wrap app-table-wrap-fixed">
+              <table className="app-table app-partner-data-table">
                 <thead>
                   <tr>
-                    <th>Partner</th>
-                    <th>Scopes</th>
-                    <th>Area</th>
-                    <th>Status</th>
+                    <th className="app-sticky-left app-sticky-impact">Impact</th>
+                    {visibleColumns.map((column) => (
+                      <th key={column}>{column}</th>
+                    ))}
                     <th>Updated</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPartnerRows.map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.partner_name}</td>
-                      <td>{row.scopes.join(', ')}</td>
-                      <td>{row.area}</td>
-                      <td>
-                        <span
-                          className={
-                            row.status.toLowerCase() === 'reviewing'
-                              ? 'app-table-badge review'
-                              : 'app-table-badge mapped'
-                          }
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                      <td>{new Date(row.created_at).toLocaleDateString()}</td>
-                    </tr>
-                  ))}
+                  {filteredPartnerRows.map((row) => {
+                    const severity = normalizeImpactStatus(row.impact_status);
+
+                    return (
+                      <tr key={row.id} className={`app-partner-row app-partner-row-${severity}`}>
+                        <td className="app-sticky-left app-sticky-impact app-impact-cell">
+                          <button
+                            type="button"
+                            className={`app-impact-dot-button app-impact-${severity}`}
+                            title={row.impact_reason || 'No active impact detected'}
+                            onClick={() => openImpactDetails(row)}
+                            aria-label={`Open impact details for ${row.partner_name || 'partner'}`}
+                          >
+                            <span className="app-impact-light" />
+                          </button>
+                        </td>
+
+                        {visibleColumns.map((column) => {
+                          const value = String(row.row_data?.[column] ?? '');
+
+                          return (
+                            <td key={`${row.id}-${column}`}>
+                              <div className="app-table-view-value" title={value}>
+                                {value || '—'}
+                              </div>
+                            </td>
+                          );
+                        })}
+
+                        <td className="app-updated-cell">
+                          {new Date(row.created_at).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1031,6 +1044,33 @@ const response = await uploadPartnersJSON(workspaceId, rows);
             <div className="app-modal-json">
               <pre>{selectedNotification.detailJson}</pre>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedPartnerImpact ? (
+        <div className="app-modal-overlay" onClick={() => setSelectedPartnerImpact(null)}>
+          <div className="app-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="app-modal-header">
+              <div>
+                <p className="app-section-kicker">Impact detail</p>
+                <h3 className="app-modal-title">{selectedPartnerImpact.partnerName}</h3>
+              </div>
+              <button
+                type="button"
+                className="app-icon-button"
+                onClick={() => setSelectedPartnerImpact(null)}
+                aria-label="Close impact detail"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="app-modal-meta">
+              <span className="app-impact-detail-label">Status: {selectedPartnerImpact.status}</span>
+            </div>
+
+            <p className="app-modal-copy">{selectedPartnerImpact.reason}</p>
           </div>
         </div>
       ) : null}
